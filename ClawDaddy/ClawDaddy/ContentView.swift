@@ -18,8 +18,8 @@ struct ContentView: View {
     @State private var emoteStyle: EmoteStyle = .none
     @State private var danceToken = 0
     @State private var bubbles: [BubbleItem] = []
-    @State private var lastCrawdaddyMessage = ""
-    @State private var currentCrawdaddyBubbleId: String?
+    @State private var lastClawDaddyMessage = ""
+    @State private var currentClawDaddyBubbleId: String?
     @State private var lastAgentMessages: [String: String] = [:]
     @State private var lastAgentStates: [String: String] = [:]
     @State private var lastTranscriptLength = 0
@@ -49,7 +49,7 @@ struct ContentView: View {
 
     private let pushToTalkKeyCode: UInt16 = 59 // Left Control
     private var isLayoutSelfTest: Bool {
-        ProcessInfo.processInfo.environment["CRAWDADDY_LAYOUT_SELFTEST"] == "1"
+        ProcessInfo.processInfo.environment["CLAWDADDY_LAYOUT_SELFTEST"] == "1"
     }
     private var isUITest: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -97,17 +97,17 @@ struct ContentView: View {
             }
             wasRecording = newValue
         }
-        .onChange(of: socket.appState.crawdaddy.lastResponse) { newValue in
+        .onChange(of: socket.appState.clawdaddy.lastResponse) { newValue in
             guard !isLayoutSelfTest else { return }
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, trimmed != lastCrawdaddyMessage else { return }
-            upsertCrawdaddyBubble(text: trimmed)
+            guard !trimmed.isEmpty, trimmed != lastClawDaddyMessage else { return }
+            upsertClawDaddyBubble(text: trimmed)
             if connectedGreetings.contains(trimmed) {
                 saluteTrigger += 1
                 danceToken += 1
             }
         }
-        .onChange(of: socket.appState.crawdaddy.state) { _, newValue in
+        .onChange(of: socket.appState.clawdaddy.state) { _, newValue in
             guard !isLayoutSelfTest else { return }
             if newValue == "thinking" {
                 setThinkingHold(duration: 2.0)
@@ -115,12 +115,12 @@ struct ContentView: View {
         }
         .onReceive(socket.$appState) { newState in
             guard !isLayoutSelfTest else { return }
-            if newState.crawdaddy.lastResponse.isEmpty, newState.subAgents.isEmpty {
+            if newState.clawdaddy.lastResponse.isEmpty, newState.subAgents.isEmpty {
                 bubbles.removeAll()
                 lastAgentMessages.removeAll()
                 lastAgentStates.removeAll()
-                lastCrawdaddyMessage = ""
-                currentCrawdaddyBubbleId = nil
+                lastClawDaddyMessage = ""
+                currentClawDaddyBubbleId = nil
             }
             updateSubAgentBubbles(newState.subAgents)
         }
@@ -131,7 +131,7 @@ struct ContentView: View {
         }
     }
 
-    private var effectiveCrawdaddyState: String {
+    private var effectiveClawDaddyState: String {
         if speech.isRecording {
             return "listening"
         }
@@ -141,7 +141,7 @@ struct ContentView: View {
         if speech.isSpeaking {
             return "speaking"
         }
-        return socket.appState.crawdaddy.state
+        return socket.appState.clawdaddy.state
     }
 
     private struct BubbleItem: Identifiable {
@@ -242,7 +242,7 @@ struct ContentView: View {
 
     private func handleEmoteCommand(_ text: String) -> Bool {
         let lower = text.lowercased()
-        let stripped = lower.replacingOccurrences(of: "crawdaddy", with: "")
+        let stripped = lower.replacingOccurrences(of: "clawdaddy", with: "")
             .replacingOccurrences(of: ",", with: " ")
             .replacingOccurrences(of: ".", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -313,7 +313,7 @@ struct ContentView: View {
     private var bottomRow: some View {
         HStack(spacing: 12) {
             DaddyView(
-                state: effectiveCrawdaddyState,
+                state: effectiveClawDaddyState,
                 size: 126,
                 jumpTrigger: ackToken,
                 ackStyle: ackStyle,
@@ -369,26 +369,26 @@ struct ContentView: View {
         }
     }
 
-    private func upsertCrawdaddyBubble(text: String) {
-        if let currentId = currentCrawdaddyBubbleId,
+    private func upsertClawDaddyBubble(text: String) {
+        if let currentId = currentClawDaddyBubbleId,
            let index = bubbles.firstIndex(where: { $0.id == currentId }) {
-            if text.hasPrefix(lastCrawdaddyMessage) || lastCrawdaddyMessage.hasPrefix(text) {
+            if text.hasPrefix(lastClawDaddyMessage) || lastClawDaddyMessage.hasPrefix(text) {
                 bubbles[index] = BubbleItem(id: currentId, text: text, isInteractive: false, agentId: nil)
-                lastCrawdaddyMessage = text
+                lastClawDaddyMessage = text
                 return
             }
         }
 
         let item = BubbleItem(id: UUID().uuidString, text: text, isInteractive: false, agentId: nil)
-        currentCrawdaddyBubbleId = item.id
-        lastCrawdaddyMessage = text
+        currentClawDaddyBubbleId = item.id
+        lastClawDaddyMessage = text
         bubbles.append(item)
         if bubbles.count > maxBubbles {
             let overflow = bubbles.count - maxBubbles
             for _ in 0..<overflow {
                 if let index = bubbles.firstIndex(where: { !$0.isInteractive }) {
-                    if bubbles[index].id == currentCrawdaddyBubbleId {
-                        currentCrawdaddyBubbleId = nil
+                    if bubbles[index].id == currentClawDaddyBubbleId {
+                        currentClawDaddyBubbleId = nil
                     }
                     bubbles.remove(at: index)
                 } else {
@@ -403,7 +403,7 @@ struct ContentView: View {
             BubbleItem(id: "selftest-1", text: "SELFTEST: 1 — short", isInteractive: false, agentId: nil),
             BubbleItem(id: "selftest-2", text: "SELFTEST: 2 — medium length line to check wrapping behavior.", isInteractive: false, agentId: nil),
             BubbleItem(id: "selftest-3", text: "SELFTEST: 3 — longer text that should wrap across multiple lines so we can validate the stack height and clipping behavior.", isInteractive: false, agentId: nil),
-            BubbleItem(id: "selftest-4", text: "SELFTEST: 4 — last bubble should sit closest to Crawdaddy.", isInteractive: false, agentId: nil)
+            BubbleItem(id: "selftest-4", text: "SELFTEST: 4 — last bubble should sit closest to ClawDaddy.", isInteractive: false, agentId: nil)
         ]
     }
 

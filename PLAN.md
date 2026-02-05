@@ -1,4 +1,4 @@
-# Crawdaddy PydanticAI Integration Plan
+# ClawDaddy PydanticAI Integration Plan
 
 Goal: Replace the coordinator/sub-agent harness with PydanticAI, keeping the SwiftUI UI while enabling fast tools and up to 20 concurrent sub-agents.
 

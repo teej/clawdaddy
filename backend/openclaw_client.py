@@ -66,7 +66,7 @@ class OpenClawClient:
         self._client_version = os.getenv("OPENCLAW_CLIENT_VERSION", "0.1.0")
         self._client_mode = "backend"
         self._client_instance_id = os.getenv(
-            "OPENCLAW_CLIENT_INSTANCE_ID", f"crawdaddy-{os.uname().nodename}"
+            "OPENCLAW_CLIENT_INSTANCE_ID", f"clawdaddy-{os.uname().nodename}"
         )
         self._device_identity = _load_device_identity()
         self._challenge_event = asyncio.Event()
@@ -117,7 +117,7 @@ class OpenClawClient:
             raise RuntimeError(
                 "OpenClaw device identity not found. Run `openclaw onboard` to create one."
             )
-        await self._state_manager.update_crawdaddy(
+        await self._state_manager.update_clawdaddy(
             state="speaking",
             last_response="Connecting to OpenClaw...",
         )
@@ -126,7 +126,7 @@ class OpenClawClient:
 
     async def announce_status(self) -> None:
         message = self._connected_message() if self._connected else "Connecting to OpenClaw..."
-        await self._state_manager.update_crawdaddy(
+        await self._state_manager.update_clawdaddy(
             state="speaking",
             last_response=message,
         )
@@ -154,7 +154,7 @@ class OpenClawClient:
         if not self._session_key:
             raise RuntimeError("OpenClaw sessionKey not available yet.")
         self._current_response = ""
-        await self._state_manager.update_crawdaddy(state="thinking")
+        await self._state_manager.update_clawdaddy(state="thinking")
         await self._broadcast_state()
         payload: dict[str, Any] = {"idempotencyKey": str(uuid.uuid4())}
         payload["sessionKey"] = self._session_key
@@ -195,7 +195,7 @@ class OpenClawClient:
         self._session_key = _extract_session_key(response) or self._session_key
         self._connected = True
         self._logger.info("OpenClaw connected session=%s", self._session_key or "unknown")
-        await self._state_manager.update_crawdaddy(
+        await self._state_manager.update_clawdaddy(
             state="speaking",
             last_response=self._connected_message(),
         )
@@ -276,7 +276,7 @@ class OpenClawClient:
         else:
             self._current_response = text
         self._logger.info("OpenClaw chat role=%s text_len=%d", role or "unknown", len(text))
-        await self._state_manager.update_crawdaddy(
+        await self._state_manager.update_clawdaddy(
             state="speaking",
             last_response=self._current_response,
         )
@@ -382,7 +382,7 @@ class OpenClawClient:
             await asyncio.sleep(self._idle_delay)
         except asyncio.CancelledError:
             return
-        await self._state_manager.update_crawdaddy(state="idle")
+        await self._state_manager.update_clawdaddy(state="idle")
         await self._broadcast_state()
 
 

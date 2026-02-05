@@ -1,5 +1,5 @@
 [project]
-name = "crawdaddy"
+name = "clawdaddy"
 version = "0.1.0"
 description = "Audio-first agent harness prototype (macOS SwiftUI + Python FastAPI)."
 readme = "README.md"

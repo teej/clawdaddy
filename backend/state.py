@@ -7,7 +7,7 @@ from typing import Optional, Literal
 from pydantic import BaseModel, Field
 
 
-class CrawdaddyState(BaseModel):
+class ClawDaddyState(BaseModel):
     state: Literal["idle", "listening", "speaking", "thinking"] = "idle"
     last_response: str = ""
 
@@ -23,7 +23,7 @@ class SubAgentState(BaseModel):
 
 
 class AppState(BaseModel):
-    crawdaddy: CrawdaddyState = Field(default_factory=CrawdaddyState)
+    clawdaddy: ClawDaddyState = Field(default_factory=ClawDaddyState)
     sub_agents: list[SubAgentState] = Field(default_factory=list)
 
 
@@ -36,11 +36,11 @@ class StateManager:
         async with self._lock:
             return self._state.model_copy(deep=True)
 
-    async def update_crawdaddy(self, **kwargs) -> AppState:
+    async def update_clawdaddy(self, **kwargs) -> AppState:
         async with self._lock:
-            data = self._state.crawdaddy.model_dump()
+            data = self._state.clawdaddy.model_dump()
             data.update(kwargs)
-            self._state.crawdaddy = CrawdaddyState(**data)
+            self._state.clawdaddy = ClawDaddyState(**data)
             return self._state.model_copy(deep=True)
 
     async def add_sub_agent(self, sub_agent: SubAgentState) -> AppState:

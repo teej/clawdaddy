@@ -7,10 +7,10 @@ Ensure multiple speech bubbles stack visibly (toast-style) without clipping, wit
 - [x] Review spec and current layout structure; research SwiftUI scroll/stack patterns.
 - [x] Refactor toast layout to a bottom-aligned stack and avoid scroll view height collapse.
 - [x] Add layout self-test seeding and a UI test that asserts 4 bubbles are visible.
-- [ ] Run UI tests (`xcodebuild test -scheme Crawdaddy`) and adjust if any failures remain.
+- [ ] Run UI tests (`xcodebuild test -scheme ClawDaddy`) and adjust if any failures remain.
 
 ## Test Strategy (No Human Intervention)
-- Launch the app with `CRAWDADDY_LAYOUT_SELFTEST=1` to auto-seed 4 known bubbles.
+- Launch the app with `CLAWDADDY_LAYOUT_SELFTEST=1` to auto-seed 4 known bubbles.
 - UI test `testToastStackShowsMultipleBubbles` asserts:
   - 4 bubble labels exist.
   - Each bubble frame is within the app window bounds.

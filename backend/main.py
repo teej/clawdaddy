@@ -12,7 +12,7 @@ from backend.openclaw_client import OpenClawClient
 from backend.state import StateManager
 
 app = FastAPI()
-logger = logging.getLogger("crawdaddy")
+logger = logging.getLogger("clawdaddy")
 if not logger.handlers:
     logging.basicConfig(
         level=logging.INFO,
@@ -92,9 +92,9 @@ manager = ConnectionManager()
 openclaw = OpenClawClient(state_manager, manager.broadcast_state)
 
 
-async def _set_crawdaddy_idle(delay_seconds: float = 1.5) -> None:
+async def _set_clawdaddy_idle(delay_seconds: float = 1.5) -> None:
     await asyncio.sleep(delay_seconds)
-    await state_manager.update_crawdaddy(state="idle")
+    await state_manager.update_clawdaddy(state="idle")
     await manager.broadcast_state()
 
 
@@ -128,20 +128,20 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     continue
                 logger.info("Transcript received text_len=%d", len(text))
                 ack_line = random.choice(ACK_LINES)
-                await state_manager.update_crawdaddy(state="speaking", last_response=ack_line)
+                await state_manager.update_clawdaddy(state="speaking", last_response=ack_line)
                 await manager.broadcast_state()
-                await state_manager.update_crawdaddy(state="thinking")
+                await state_manager.update_clawdaddy(state="thinking")
                 await manager.broadcast_state()
 
                 try:
                     await openclaw.send_chat(text)
                 except Exception as exc:
                     logger.exception("OpenClaw send failed")
-                    await state_manager.update_crawdaddy(
+                    await state_manager.update_clawdaddy(
                         state="speaking", last_response=f"Error: {exc}"
                     )
                     await manager.broadcast_state()
-                    asyncio.create_task(_set_crawdaddy_idle())
+                    asyncio.create_task(_set_clawdaddy_idle())
             elif msg_type == "input_response":
                 text = str(data.get("text", "")).strip()
                 if text:

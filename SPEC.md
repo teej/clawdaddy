@@ -1,4 +1,4 @@
-# Crawdaddy: Audio-First Agent Harness
+# ClawDaddy: Audio-First Agent Harness
 
 ## Project Spec v0.1
 
@@ -6,9 +6,9 @@
 
 ## What This Is
 
-An audio-first agent interface inspired by Jarvis from Iron Man. You speak to a continuous presence (Crawdaddy), who acknowledges briefly and orchestrates work in the background. Sub-agents appear as emoji characters performing tasks. The interface is native macOS, not a web app.
+An audio-first agent interface inspired by Jarvis from Iron Man. You speak to a continuous presence (ClawDaddy), who acknowledges briefly and orchestrates work in the background. Sub-agents appear as emoji characters performing tasks. The interface is native macOS, not a web app.
 
-**Core interaction model:** You talk *to* Crawdaddy while working. Crawdaddy manages tasks and projects relevant information. This is not conversation with a chatbot—it's a companion that listens, coordinates, and surfaces things when needed.
+**Core interaction model:** You talk *to* ClawDaddy while working. ClawDaddy manages tasks and projects relevant information. This is not conversation with a chatbot—it's a companion that listens, coordinates, and surfaces things when needed.
 
 ---
 
@@ -16,10 +16,10 @@ An audio-first agent interface inspired by Jarvis from Iron Man. You speak to a 
 
 A working end-to-end prototype that demonstrates:
 
-1. **Continuous voice input** — Speak naturally, Crawdaddy hears you
-2. **Brief acknowledgment** — Crawdaddy responds with short spoken confirmation
-3. **Task delegation** — Crawdaddy spawns a sub-agent to do work
-4. **Visual presence** — Crawdaddy and sub-agents appear as emoji characters on screen
+1. **Continuous voice input** — Speak naturally, ClawDaddy hears you
+2. **Brief acknowledgment** — ClawDaddy responds with short spoken confirmation
+3. **Task delegation** — ClawDaddy spawns a sub-agent to do work
+4. **Visual presence** — ClawDaddy and sub-agents appear as emoji characters on screen
 5. **Status visibility** — See when sub-agents are working/done/need input
 6. **Input requests** — Sub-agent can surface a question; user clicks to answer
 
@@ -42,7 +42,7 @@ A working end-to-end prototype that demonstrates:
 │                   SwiftUI Native App                    │
 │                                                         │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐ │
-│  │  Crawdaddy  │    │  Sub-Agent  │    │   Speech    │ │
+│  │  ClawDaddy  │    │  Sub-Agent  │    │   Speech    │ │
 │  │     🦞      │    │     🦀      │    │   Bubble    │ │
 │  └─────────────┘    └─────────────┘    └─────────────┘ │
 │                                                         │
@@ -57,7 +57,7 @@ A working end-to-end prototype that demonstrates:
 │                   Python Backend                        │
 │                                                         │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐ │
-│  │  Crawdaddy  │    │  Sub-Agent  │    │    State    │ │
+│  │  ClawDaddy  │    │  Sub-Agent  │    │    State    │ │
 │  │ Coordinator │───▶│   Runner    │───▶│   Manager   │ │
 │  │  (Claude)   │    │  (Claude)   │    │             │ │
 │  └─────────────┘    └─────────────┘    └─────────────┘ │
@@ -66,7 +66,7 @@ A working end-to-end prototype that demonstrates:
 
 **Two processes:**
 1. **SwiftUI app** — Native macOS window with emoji characters, handles speech input/output
-2. **Python backend** — Runs Crawdaddy coordinator, manages sub-agents, communicates via WebSocket
+2. **Python backend** — Runs ClawDaddy coordinator, manages sub-agents, communicates via WebSocket
 
 ---
 
@@ -76,7 +76,7 @@ A working end-to-end prototype that demonstrates:
 
 **Responsibilities:**
 - Floating transparent window (always visible, doesn't steal focus)
-- Render Crawdaddy emoji 🦞 with idle/listening/speaking states
+- Render ClawDaddy emoji 🦞 with idle/listening/speaking states
 - Render sub-agent emoji 🦀 when active with working/waiting/done states
 - Display speech bubbles for responses and questions
 - Capture voice input using macOS Speech framework
@@ -85,7 +85,7 @@ A working end-to-end prototype that demonstrates:
 - Handle clicks on speech bubbles (for answering sub-agent questions)
 
 **Visual elements:**
-- Crawdaddy: 🦞 emoji, visual indicator when listening (glow/pulse/size change)
+- ClawDaddy: 🦞 emoji, visual indicator when listening (glow/pulse/size change)
 - Sub-agent: 🦀 emoji, animation when working
 - Speech bubble: Rounded rect with text, appears/disappears
 - Click target on bubble when sub-agent needs input
@@ -100,12 +100,12 @@ A working end-to-end prototype that demonstrates:
 
 **Responsibilities:**
 - WebSocket server for bidirectional communication
-- Crawdaddy coordinator agent (Claude API)
+- ClawDaddy coordinator agent (Claude API)
 - Sub-agent runner (Claude API, async)
 - State management (what's running, what's waiting, results)
 - Push state updates immediately via WebSocket
 
-**Crawdaddy Coordinator behavior:**
+**ClawDaddy Coordinator behavior:**
 - Receives user transcript
 - Returns structured response:
   ```json
@@ -132,7 +132,7 @@ A working end-to-end prototype that demonstrates:
 **State shape:**
 ```json
 {
-  "crawdaddy": {
+  "clawdaddy": {
     "state": "idle" | "listening" | "speaking",
     "last_response": "string"
   },
@@ -155,7 +155,7 @@ A working end-to-end prototype that demonstrates:
 
 **Output:**
 - `AVSpeechSynthesizer` for TTS
-- Crawdaddy speaks responses aloud
+- ClawDaddy speaks responses aloud
 
 ---
 
@@ -163,10 +163,10 @@ A working end-to-end prototype that demonstrates:
 
 ### Happy Path Example
 
-1. User holds spacebar and says: "Hey Crawdaddy, what's the weather in San Francisco?"
+1. User holds spacebar and says: "Hey ClawDaddy, what's the weather in San Francisco?"
 2. SwiftUI app transcribes, sends to backend via WebSocket
-3. Backend calls Crawdaddy coordinator (Claude)
-4. Crawdaddy returns: `{ spoken_response: "Checking the weather now.", spawn_task: { description: "Get weather for San Francisco", type: "weather" } }`
+3. Backend calls ClawDaddy coordinator (Claude)
+4. ClawDaddy returns: `{ spoken_response: "Checking the weather now.", spawn_task: { description: "Get weather for San Francisco", type: "weather" } }`
 5. SwiftUI app:
    - Plays TTS: "Checking the weather now."
    - Shows 🦀 sub-agent emoji (working state)
@@ -178,8 +178,8 @@ A working end-to-end prototype that demonstrates:
 
 ### Sub-Agent Needs Input Example
 
-1. User: "Crawdaddy, help me write an email to mom"
-2. Crawdaddy: "Sure, I'll draft that. What's the main thing you want to say?"
+1. User: "ClawDaddy, help me write an email to mom"
+2. ClawDaddy: "Sure, I'll draft that. What's the main thing you want to say?"
 3. Sub-agent state: `waiting_for_input`, question: "What's the main thing you want to say?"
 4. SwiftUI app shows speech bubble with question, clickable
 5. User clicks bubble, types or speaks answer
@@ -206,16 +206,16 @@ A working end-to-end prototype that demonstrates:
 ## File Structure
 
 ```
-crawdaddy/
+clawdaddy/
 ├── backend/
 │   ├── main.py              # FastAPI + WebSocket server
-│   ├── crawdaddy.py         # Coordinator agent logic
+│   ├── clawdaddy.py         # Coordinator agent logic
 │   ├── sub_agent.py         # Sub-agent runner
 │   ├── state.py             # State management
 │   └── requirements.txt
 ├── app/
-│   └── Crawdaddy/
-│       ├── CrawdaddyApp.swift       # App entry point
+│   └── ClawDaddy/
+│       ├── ClawDaddyApp.swift       # App entry point
 │       ├── ContentView.swift        # Main floating window
 │       ├── EmojiView.swift          # Character rendering
 │       ├── SpeechBubbleView.swift   # Bubble component
@@ -229,14 +229,14 @@ crawdaddy/
 ## Build Checklist
 
 - [ ] FastAPI WebSocket server that accepts transcripts and pushes state
-- [ ] Crawdaddy coordinator (Claude call, structured output, brief responses)
+- [ ] ClawDaddy coordinator (Claude call, structured output, brief responses)
 - [ ] Sub-agent runner (Claude call, async, updates state)
-- [ ] State manager that tracks crawdaddy + sub-agent state
+- [ ] State manager that tracks clawdaddy + sub-agent state
 - [ ] SwiftUI floating transparent window
 - [ ] 🦞 emoji with visual states (idle/listening/speaking)
 - [ ] 🦀 emoji that appears when sub-agent active (working/waiting/done)
 - [ ] Push-to-talk speech recognition (spacebar)
-- [ ] TTS playback for Crawdaddy responses
+- [ ] TTS playback for ClawDaddy responses
 - [ ] WebSocket client in SwiftUI app
 - [ ] Speech bubbles for responses and questions
 - [ ] Clickable bubble for sub-agent input requests
@@ -248,9 +248,9 @@ crawdaddy/
 
 The prototype is successful if:
 
-1. ✅ User can speak to Crawdaddy using push-to-talk
-2. ✅ Crawdaddy responds audibly with brief acknowledgment
-3. ✅ 🦀 sub-agent appears when Crawdaddy delegates a task
+1. ✅ User can speak to ClawDaddy using push-to-talk
+2. ✅ ClawDaddy responds audibly with brief acknowledgment
+3. ✅ 🦀 sub-agent appears when ClawDaddy delegates a task
 4. ✅ Sub-agent visually shows working state
 5. ✅ Sub-agent result appears in speech bubble when done
 6. ✅ The whole thing feels like talking to a presence, not using a chat app
@@ -260,7 +260,7 @@ The prototype is successful if:
 ## Open Questions
 
 - Window position and size
-- How to handle overlapping speech (user talks while Crawdaddy speaking)
+- How to handle overlapping speech (user talks while ClawDaddy speaking)
 - Keyboard shortcut for push-to-talk (spacebar? fn? custom?)
 - Whether sub-agent result should also be spoken aloud
 - How to gracefully handle errors
@@ -272,7 +272,7 @@ The prototype is successful if:
 - Multiple simultaneous sub-agents
 - Persistent task memory
 - Real tool integrations (web search, file system, calendar)
-- Voice wake word ("Hey Crawdaddy")
+- Voice wake word ("Hey ClawDaddy")
 - Continuous listening without push-to-talk
 - Custom voices / ElevenLabs
 - Visual task history

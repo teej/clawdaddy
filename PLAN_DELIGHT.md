@@ -1,7 +1,7 @@
 # Research Plan — Delights / Serendipity (2026-02-03)
 
 ## Objective
-Create a game/entertainment‑driven delight strategy for Crawdaddy (audio‑first coordinator + sub‑agents), emphasizing playful, viral, and serendipitous moments while staying within single‑sprite animation constraints and the spec’s “non‑chatty coordinator” model.
+Create a game/entertainment‑driven delight strategy for ClawDaddy (audio‑first coordinator + sub‑agents), emphasizing playful, viral, and serendipitous moments while staying within single‑sprite animation constraints and the spec’s “non‑chatty coordinator” model.
 
 ## Constraints
 - Single‑sprite character (no multi‑sprite rigs).
@@ -26,7 +26,7 @@ Create a game/entertainment‑driven delight strategy for Crawdaddy (audio‑fir
 ## Method
 1) Collect primary/secondary sources from game design + animation + openclaw usage.
 2) Extract patterns into a “Delight Principles” list (e.g., anticipation, follow‑through, clarity, rhythm).
-3) Map patterns to Crawdaddy constraints (single sprite, minimal UI, fast acknowledgement).
+3) Map patterns to ClawDaddy constraints (single sprite, minimal UI, fast acknowledgement).
 4) Generate idea backlog (30+). Tag by: effort, novelty, risk, spec‑fit, viral potential.
 5) Prioritize into P0/P1/P2 and describe implementation sketches.
 

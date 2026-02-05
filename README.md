@@ -1,4 +1,4 @@
-# Crawdaddy
+# ClawDaddy
 
 Audio-first agent harness prototype (macOS SwiftUI + Python FastAPI).
 
@@ -28,7 +28,7 @@ OPENCLAW_DEBUG_EVENTS=0
 
 ## macOS App
 
-1. Open `Crawdaddy/Crawdaddy.xcodeproj` in Xcode.
+1. Open `ClawDaddy/ClawDaddy.xcodeproj` in Xcode.
 2. Add usage descriptions to Info.plist:
    - `NSSpeechRecognitionUsageDescription`
    - `NSMicrophoneUsageDescription`
@@ -36,4 +36,4 @@ OPENCLAW_DEBUG_EVENTS=0
 
 Notes:
 - The push-to-talk key monitor is local, so the window needs focus.
-- The WebSocket URL is hardcoded to `ws://127.0.0.1:8000/ws` in `Crawdaddy/Crawdaddy/WebSocketClient.swift`.
+- The WebSocket URL is hardcoded to `ws://127.0.0.1:8000/ws` in `ClawDaddy/ClawDaddy/WebSocketClient.swift`.

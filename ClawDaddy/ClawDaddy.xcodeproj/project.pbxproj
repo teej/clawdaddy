@@ -12,50 +12,50 @@
 			containerPortal = 07E4DDC72F316B2900BAB48F /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 07E4DDCE2F316B2900BAB48F;
-			remoteInfo = Crawdaddy;
+			remoteInfo = ClawDaddy;
 		};
 		07E4DDEB2F316B2A00BAB48F /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 07E4DDC72F316B2900BAB48F /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 07E4DDCE2F316B2900BAB48F;
-			remoteInfo = Crawdaddy;
+			remoteInfo = ClawDaddy;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		07E4DDCF2F316B2900BAB48F /* Crawdaddy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Crawdaddy.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		07E4DDE02F316B2A00BAB48F /* CrawdaddyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CrawdaddyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		07E4DDEA2F316B2A00BAB48F /* CrawdaddyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CrawdaddyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		07E4DDCF2F316B2900BAB48F /* ClawDaddy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClawDaddy.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		07E4DDE02F316B2A00BAB48F /* ClawDaddyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClawDaddyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		07E4DDEA2F316B2A00BAB48F /* ClawDaddyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClawDaddyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		07E4DE222F316D4E00BAB48F /* Exceptions for "Crawdaddy" folder in "Crawdaddy" target */ = {
+		07E4DE222F316D4E00BAB48F /* Exceptions for "ClawDaddy" folder in "ClawDaddy" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
-			target = 07E4DDCE2F316B2900BAB48F /* Crawdaddy */;
+			target = 07E4DDCE2F316B2900BAB48F /* ClawDaddy */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		07E4DDD12F316B2900BAB48F /* Crawdaddy */ = {
+		07E4DDD12F316B2900BAB48F /* ClawDaddy */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				07E4DE222F316D4E00BAB48F /* Exceptions for "Crawdaddy" folder in "Crawdaddy" target */,
+				07E4DE222F316D4E00BAB48F /* Exceptions for "ClawDaddy" folder in "ClawDaddy" target */,
 			);
-			path = Crawdaddy;
+			path = ClawDaddy;
 			sourceTree = "<group>";
 		};
-		07E4DDE32F316B2A00BAB48F /* CrawdaddyTests */ = {
+		07E4DDE32F316B2A00BAB48F /* ClawDaddyTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = CrawdaddyTests;
+			path = ClawDaddyTests;
 			sourceTree = "<group>";
 		};
-		07E4DDED2F316B2A00BAB48F /* CrawdaddyUITests */ = {
+		07E4DDED2F316B2A00BAB48F /* ClawDaddyUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = CrawdaddyUITests;
+			path = ClawDaddyUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -88,9 +88,9 @@
 		07E4DDC62F316B2900BAB48F = {
 			isa = PBXGroup;
 			children = (
-				07E4DDD12F316B2900BAB48F /* Crawdaddy */,
-				07E4DDE32F316B2A00BAB48F /* CrawdaddyTests */,
-				07E4DDED2F316B2A00BAB48F /* CrawdaddyUITests */,
+				07E4DDD12F316B2900BAB48F /* ClawDaddy */,
+				07E4DDE32F316B2A00BAB48F /* ClawDaddyTests */,
+				07E4DDED2F316B2A00BAB48F /* ClawDaddyUITests */,
 				07E4DDD02F316B2900BAB48F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -98,9 +98,9 @@
 		07E4DDD02F316B2900BAB48F /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				07E4DDCF2F316B2900BAB48F /* Crawdaddy.app */,
-				07E4DDE02F316B2A00BAB48F /* CrawdaddyTests.xctest */,
-				07E4DDEA2F316B2A00BAB48F /* CrawdaddyUITests.xctest */,
+				07E4DDCF2F316B2900BAB48F /* ClawDaddy.app */,
+				07E4DDE02F316B2A00BAB48F /* ClawDaddyTests.xctest */,
+				07E4DDEA2F316B2A00BAB48F /* ClawDaddyUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -108,9 +108,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		07E4DDCE2F316B2900BAB48F /* Crawdaddy */ = {
+		07E4DDCE2F316B2900BAB48F /* ClawDaddy */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 07E4DDF42F316B2A00BAB48F /* Build configuration list for PBXNativeTarget "Crawdaddy" */;
+			buildConfigurationList = 07E4DDF42F316B2A00BAB48F /* Build configuration list for PBXNativeTarget "ClawDaddy" */;
 			buildPhases = (
 				07E4DDCB2F316B2900BAB48F /* Sources */,
 				07E4DDCC2F316B2900BAB48F /* Frameworks */,
@@ -121,18 +121,18 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				07E4DDD12F316B2900BAB48F /* Crawdaddy */,
+				07E4DDD12F316B2900BAB48F /* ClawDaddy */,
 			);
-			name = Crawdaddy;
+			name = ClawDaddy;
 			packageProductDependencies = (
 			);
-			productName = Crawdaddy;
-			productReference = 07E4DDCF2F316B2900BAB48F /* Crawdaddy.app */;
+			productName = ClawDaddy;
+			productReference = 07E4DDCF2F316B2900BAB48F /* ClawDaddy.app */;
 			productType = "com.apple.product-type.application";
 		};
-		07E4DDDF2F316B2A00BAB48F /* CrawdaddyTests */ = {
+		07E4DDDF2F316B2A00BAB48F /* ClawDaddyTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 07E4DDF72F316B2A00BAB48F /* Build configuration list for PBXNativeTarget "CrawdaddyTests" */;
+			buildConfigurationList = 07E4DDF72F316B2A00BAB48F /* Build configuration list for PBXNativeTarget "ClawDaddyTests" */;
 			buildPhases = (
 				07E4DDDC2F316B2A00BAB48F /* Sources */,
 				07E4DDDD2F316B2A00BAB48F /* Frameworks */,
@@ -144,18 +144,18 @@
 				07E4DDE22F316B2A00BAB48F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				07E4DDE32F316B2A00BAB48F /* CrawdaddyTests */,
+				07E4DDE32F316B2A00BAB48F /* ClawDaddyTests */,
 			);
-			name = CrawdaddyTests;
+			name = ClawDaddyTests;
 			packageProductDependencies = (
 			);
-			productName = CrawdaddyTests;
-			productReference = 07E4DDE02F316B2A00BAB48F /* CrawdaddyTests.xctest */;
+			productName = ClawDaddyTests;
+			productReference = 07E4DDE02F316B2A00BAB48F /* ClawDaddyTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		07E4DDE92F316B2A00BAB48F /* CrawdaddyUITests */ = {
+		07E4DDE92F316B2A00BAB48F /* ClawDaddyUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 07E4DDFA2F316B2A00BAB48F /* Build configuration list for PBXNativeTarget "CrawdaddyUITests" */;
+			buildConfigurationList = 07E4DDFA2F316B2A00BAB48F /* Build configuration list for PBXNativeTarget "ClawDaddyUITests" */;
 			buildPhases = (
 				07E4DDE62F316B2A00BAB48F /* Sources */,
 				07E4DDE72F316B2A00BAB48F /* Frameworks */,
@@ -167,13 +167,13 @@
 				07E4DDEC2F316B2A00BAB48F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				07E4DDED2F316B2A00BAB48F /* CrawdaddyUITests */,
+				07E4DDED2F316B2A00BAB48F /* ClawDaddyUITests */,
 			);
-			name = CrawdaddyUITests;
+			name = ClawDaddyUITests;
 			packageProductDependencies = (
 			);
-			productName = CrawdaddyUITests;
-			productReference = 07E4DDEA2F316B2A00BAB48F /* CrawdaddyUITests.xctest */;
+			productName = ClawDaddyUITests;
+			productReference = 07E4DDEA2F316B2A00BAB48F /* ClawDaddyUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -199,7 +199,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 07E4DDCA2F316B2900BAB48F /* Build configuration list for PBXProject "Crawdaddy" */;
+			buildConfigurationList = 07E4DDCA2F316B2900BAB48F /* Build configuration list for PBXProject "ClawDaddy" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -213,9 +213,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				07E4DDCE2F316B2900BAB48F /* Crawdaddy */,
-				07E4DDDF2F316B2A00BAB48F /* CrawdaddyTests */,
-				07E4DDE92F316B2A00BAB48F /* CrawdaddyUITests */,
+				07E4DDCE2F316B2900BAB48F /* ClawDaddy */,
+				07E4DDDF2F316B2A00BAB48F /* ClawDaddyTests */,
+				07E4DDE92F316B2A00BAB48F /* ClawDaddyUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -271,12 +271,12 @@
 /* Begin PBXTargetDependency section */
 		07E4DDE22F316B2A00BAB48F /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 07E4DDCE2F316B2900BAB48F /* Crawdaddy */;
+			target = 07E4DDCE2F316B2900BAB48F /* ClawDaddy */;
 			targetProxy = 07E4DDE12F316B2A00BAB48F /* PBXContainerItemProxy */;
 		};
 		07E4DDEC2F316B2A00BAB48F /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 07E4DDCE2F316B2900BAB48F /* Crawdaddy */;
+			target = 07E4DDCE2F316B2900BAB48F /* ClawDaddy */;
 			targetProxy = 07E4DDEB2F316B2A00BAB48F /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -405,23 +405,23 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Crawdaddy/Crawdaddy.entitlements;
+				CODE_SIGN_ENTITLEMENTS = ClawDaddy/ClawDaddy.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"Crawdaddy/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"ClawDaddy/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Crawdaddy/Info.plist;
+				INFOPLIST_FILE = ClawDaddy/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voice input for Crawdaddy";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Speech recognition for Cradaddy";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voice input for ClawDaddy";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Speech recognition for ClawDaddy";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = teej.Crawdaddy;
+				PRODUCT_BUNDLE_IDENTIFIER = teej.ClawDaddy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -433,23 +433,23 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Crawdaddy/Crawdaddy.entitlements;
+				CODE_SIGN_ENTITLEMENTS = ClawDaddy/ClawDaddy.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_ASSET_PATHS = "\"Crawdaddy/Preview Content\"";
+				DEVELOPMENT_ASSET_PATHS = "\"ClawDaddy/Preview Content\"";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = Crawdaddy/Info.plist;
+				INFOPLIST_FILE = ClawDaddy/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voice input for Crawdaddy";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Speech recognition for Cradaddy";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Voice input for ClawDaddy";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Speech recognition for ClawDaddy";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = teej.Crawdaddy;
+				PRODUCT_BUNDLE_IDENTIFIER = teej.ClawDaddy;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -465,11 +465,11 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = teej.CrawdaddyTests;
+				PRODUCT_BUNDLE_IDENTIFIER = teej.ClawDaddyTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Crawdaddy.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Crawdaddy";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ClawDaddy.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ClawDaddy";
 			};
 			name = Debug;
 		};
@@ -482,11 +482,11 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = teej.CrawdaddyTests;
+				PRODUCT_BUNDLE_IDENTIFIER = teej.ClawDaddyTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Crawdaddy.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Crawdaddy";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ClawDaddy.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ClawDaddy";
 			};
 			name = Release;
 		};
@@ -497,11 +497,11 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = teej.CrawdaddyUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = teej.ClawDaddyUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = Crawdaddy;
+				TEST_TARGET_NAME = ClawDaddy;
 			};
 			name = Debug;
 		};
@@ -512,18 +512,18 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = teej.CrawdaddyUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = teej.ClawDaddyUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = Crawdaddy;
+				TEST_TARGET_NAME = ClawDaddy;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		07E4DDCA2F316B2900BAB48F /* Build configuration list for PBXProject "Crawdaddy" */ = {
+		07E4DDCA2F316B2900BAB48F /* Build configuration list for PBXProject "ClawDaddy" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				07E4DDF22F316B2A00BAB48F /* Debug */,
@@ -532,7 +532,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		07E4DDF42F316B2A00BAB48F /* Build configuration list for PBXNativeTarget "Crawdaddy" */ = {
+		07E4DDF42F316B2A00BAB48F /* Build configuration list for PBXNativeTarget "ClawDaddy" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				07E4DDF52F316B2A00BAB48F /* Debug */,
@@ -541,7 +541,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		07E4DDF72F316B2A00BAB48F /* Build configuration list for PBXNativeTarget "CrawdaddyTests" */ = {
+		07E4DDF72F316B2A00BAB48F /* Build configuration list for PBXNativeTarget "ClawDaddyTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				07E4DDF82F316B2A00BAB48F /* Debug */,
@@ -550,7 +550,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		07E4DDFA2F316B2A00BAB48F /* Build configuration list for PBXNativeTarget "CrawdaddyUITests" */ = {
+		07E4DDFA2F316B2A00BAB48F /* Build configuration list for PBXNativeTarget "ClawDaddyUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				07E4DDFB2F316B2A00BAB48F /* Debug */,

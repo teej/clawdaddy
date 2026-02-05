@@ -1,13 +1,13 @@
 //
-//  CrawdaddyUITestsLaunchTests.swift
-//  CrawdaddyUITests
+//  ClawDaddyUITestsLaunchTests.swift
+//  ClawDaddyUITests
 //
 //  Created by TJ Murphy on 2/2/26.
 //
 
 import XCTest
 
-final class CrawdaddyUITestsLaunchTests: XCTestCase {
+final class ClawDaddyUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

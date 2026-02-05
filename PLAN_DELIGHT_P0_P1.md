@@ -1,7 +1,7 @@
-# Crawdaddy Delight Plan (P0 + P1, no Captain's Log)
+# ClawDaddy Delight Plan (P0 + P1, no Captain's Log)
 
 ## Scope
-Implement game-feel inspired delight improvements for Crawdaddy using single-sprite animation, event-driven micro reactions, and rare idle variants. Exclude Captain's Log.
+Implement game-feel inspired delight improvements for ClawDaddy using single-sprite animation, event-driven micro reactions, and rare idle variants. Exclude Captain's Log.
 
 ## Goals
 - Make acknowledgements feel snappy and satisfying (anticipation + double-bounce).

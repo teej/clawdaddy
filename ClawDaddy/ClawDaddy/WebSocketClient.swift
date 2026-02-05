@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-struct CrawdaddyState: Codable {
+struct ClawDaddyState: Codable {
     var state: String
     var lastResponse: String
 
@@ -10,7 +10,7 @@ struct CrawdaddyState: Codable {
         case lastResponse = "last_response"
     }
 
-    static let empty = CrawdaddyState(state: "idle", lastResponse: "")
+    static let empty = ClawDaddyState(state: "idle", lastResponse: "")
 }
 
 struct SubAgentState: Codable, Identifiable {
@@ -44,15 +44,15 @@ struct SubAgentState: Codable, Identifiable {
 }
 
 struct AppState: Codable {
-    var crawdaddy: CrawdaddyState
+    var clawdaddy: ClawDaddyState
     var subAgents: [SubAgentState]
 
     enum CodingKeys: String, CodingKey {
-        case crawdaddy
+        case clawdaddy
         case subAgents = "sub_agents"
     }
 
-    static let empty = AppState(crawdaddy: .empty, subAgents: [])
+    static let empty = AppState(clawdaddy: .empty, subAgents: [])
 }
 
 struct ServerMessage: Codable {

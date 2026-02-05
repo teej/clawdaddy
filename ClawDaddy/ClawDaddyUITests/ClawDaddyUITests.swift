@@ -1,13 +1,13 @@
 //
-//  CrawdaddyUITests.swift
-//  CrawdaddyUITests
+//  ClawDaddyUITests.swift
+//  ClawDaddyUITests
 //
 //  Created by TJ Murphy on 2/2/26.
 //
 
 import XCTest
 
-final class CrawdaddyUITests: XCTestCase {
+final class ClawDaddyUITests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.
@@ -34,7 +34,7 @@ final class CrawdaddyUITests: XCTestCase {
     @MainActor
     func testToastStackShowsMultipleBubbles() throws {
         let app = XCUIApplication()
-        app.launchEnvironment["CRAWDADDY_LAYOUT_SELFTEST"] = "1"
+        app.launchEnvironment["CLAWDADDY_LAYOUT_SELFTEST"] = "1"
         app.launch()
 
         let bubbles = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "SELFTEST:"))
