@@ -213,3 +213,6 @@ __marimo__/
 *.xcuserstate
 xcuserdata/
 DerivedData/
+
+# PSD source files
+*.psd
