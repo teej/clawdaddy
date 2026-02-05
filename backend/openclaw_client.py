@@ -288,6 +288,7 @@ class OpenClawClient:
         await self._state_manager.update_clawdaddy(
             state="speaking",
             last_response=self._current_response,
+            is_greeting=False,
         )
         await self._broadcast_state()
         self._schedule_idle()

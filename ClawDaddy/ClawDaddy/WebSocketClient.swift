@@ -15,7 +15,20 @@ struct ClawDaddyState: Codable {
         case isGreeting = "is_greeting"
     }
 
-    static let empty = ClawDaddyState(state: "idle", lastResponse: "", isGreeting: false)
+    init(state: String, lastResponse: String, isGreeting: Bool = false) {
+        self.state = state
+        self.lastResponse = lastResponse
+        self.isGreeting = isGreeting
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        state = try container.decode(String.self, forKey: .state)
+        lastResponse = try container.decode(String.self, forKey: .lastResponse)
+        isGreeting = try container.decodeIfPresent(Bool.self, forKey: .isGreeting) ?? false
+    }
+
+    static let empty = ClawDaddyState(state: "idle", lastResponse: "")
 }
 
 struct SubAgentState: Codable, Identifiable {

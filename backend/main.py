@@ -140,7 +140,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     continue
                 logger.info("Transcript received text_len=%d", len(text))
                 ack_line = random.choice(ACK_LINES)
-                await state_manager.update_clawdaddy(state="speaking", last_response=ack_line)
+                await state_manager.update_clawdaddy(state="speaking", last_response=ack_line, is_greeting=False)
                 await manager.broadcast_state()
                 await state_manager.update_clawdaddy(state="thinking")
                 await manager.broadcast_state()
