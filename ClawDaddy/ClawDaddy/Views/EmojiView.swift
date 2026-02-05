@@ -5,23 +5,43 @@ struct EmojiView: View {
     let state: String
     let size: CGFloat
     var showsGlow: Bool = true
+    var taskDescription: String = ""
+    var onTap: (() -> Void)?
 
     @State private var phase = false
+    @State private var isHovered = false
 
     var body: some View {
         Text(emoji)
             .font(.system(size: size))
-            .scaleEffect(scale)
+            .scaleEffect(hoverScale * scale)
             .opacity(opacity)
             .rotationEffect(rotation)
             .shadow(color: glowColor, radius: glowRadius)
             .animation(animation, value: phase)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isHovered)
+            .onHover { hovering in
+                isHovered = hovering
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .onTapGesture {
+                onTap?()
+            }
+            .help(taskDescription)
             .onAppear {
                 startPhase()
             }
             .onChange(of: state) { _, _ in
                 startPhase()
             }
+    }
+
+    private var hoverScale: CGFloat {
+        isHovered ? 1.15 : 1.0
     }
 
     private var isListening: Bool {

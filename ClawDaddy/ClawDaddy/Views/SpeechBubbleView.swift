@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct TypewriterText: View {
@@ -57,9 +58,12 @@ struct SpeechBubbleView: View {
     var onRevealChange: ((Bool) -> Void)?
     var onTap: () -> Void
 
+    @State private var isHovered = false
+    @State private var showCopied = false
+
     var body: some View {
         let base = bubbleShape
-            .fill(Color.white.opacity(0.92))
+            .fill(Color.white.opacity(isHovered ? 1.0 : 0.92))
             .overlay(
                 bubbleShape
                     .stroke(Color.gray.opacity(0.4), lineWidth: 0.5)
@@ -78,11 +82,34 @@ struct SpeechBubbleView: View {
             .padding(12)
             .background(base)
             .overlay(interactiveStroke)
+            .overlay {
+                if showCopied {
+                    bubbleShape
+                        .fill(Color.black.opacity(0.6))
+                        .overlay(
+                            Text("Copied!")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.white)
+                        )
+                        .transition(.opacity)
+                }
+            }
             .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 2)
             .frame(maxWidth: 280, alignment: .leading)
+            .animation(.easeInOut(duration: 0.15), value: isHovered)
+            .onHover { hovering in
+                isHovered = hovering
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
             .onTapGesture {
                 if isInteractive {
                     onTap()
+                } else {
+                    copyToClipboard()
                 }
             }
     }
@@ -98,5 +125,18 @@ struct SpeechBubbleView: View {
 
     private var bubbleShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: 12)
+    }
+
+    private func copyToClipboard() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showCopied = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showCopied = false
+            }
+        }
     }
 }

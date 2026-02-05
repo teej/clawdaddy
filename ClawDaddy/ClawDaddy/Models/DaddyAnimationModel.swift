@@ -12,6 +12,7 @@ enum DaddyEvent {
     case reaction(ReactionStyle)
     case salute
     case emote(EmoteStyle)
+    case randomEmote
     case dance
     case talkingChanged(Bool)
 }
@@ -28,7 +29,7 @@ enum ReactionStyle: Int {
     case alert
 }
 
-enum EmoteStyle: Int {
+enum EmoteStyle: Int, CaseIterable {
     case none
     case wink
     case tilt
@@ -131,6 +132,10 @@ final class DaddyAnimationModel {
             playSalute()
         case .emote(let style):
             playEmote(style: style)
+        case .randomEmote:
+            if let style = EmoteStyle.allCases.filter({ $0 != .none }).randomElement() {
+                playEmote(style: style)
+            }
         case .dance:
             playDance()
         case .talkingChanged(let talking):

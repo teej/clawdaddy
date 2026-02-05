@@ -428,7 +428,12 @@ struct ContentView: View {
                                 emoji: "🦞",
                                 state: agent.state,
                                 size: 44,
-                                showsGlow: false
+                                showsGlow: false,
+                                taskDescription: agent.taskDescription,
+                                onTap: agent.state == "waiting_for_input" ? {
+                                    pendingInputAgentId = agent.id
+                                    showingInput = true
+                                } : nil
                             )
                             .debugBorder(showDebugBorders, color: .yellow)
                             .transition(.scale.combined(with: .opacity))
