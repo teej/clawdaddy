@@ -17,6 +17,8 @@ enum EmoteStyle: Int {
     case wink
     case tilt
     case surprised
+    case backflip
+    case plank
 }
 
 struct DaddyView: View {
@@ -556,6 +558,7 @@ struct DaddyView: View {
         guard !isPlayingVariant else { return }
         resetIdleVariant()
         isPlayingVariant = true
+        var useFollowThrough = true
         let steps: [IdleStep]
         switch style {
         case .wink:
@@ -577,10 +580,40 @@ struct DaddyView: View {
                 IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: 6), scaleX: 1.06, scaleY: 0.94, duration: 0.12),
                 IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: -8), scaleX: 0.98, scaleY: 1.08, duration: 0.18),
             ]
+        case .backflip:
+            useFollowThrough = false
+            steps = [
+                // Squash anticipation
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: 6), scaleX: 1.12, scaleY: 0.88, duration: 0.12),
+                // Launch up + 180° spin
+                IdleStep(rotation: 180.0, offset: CGSize(width: 0, height: -30), scaleX: 0.95, scaleY: 1.05, duration: 0.28),
+                // Continue to 360° coming down
+                IdleStep(rotation: 360.0, offset: CGSize(width: 0, height: -8), scaleX: 1.0, scaleY: 1.0, duration: 0.24),
+                // Landing squash
+                IdleStep(rotation: 360.0, offset: CGSize(width: 0, height: 5), scaleX: 1.1, scaleY: 0.9, duration: 0.1),
+                // Settle back to neutral
+                IdleStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.18),
+            ]
+        case .plank:
+            useFollowThrough = false
+            steps = [
+                // Lean right
+                IdleStep(rotation: 4.0, offset: CGSize(width: 10, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.2),
+                // Slide off window edge
+                IdleStep(rotation: 6.0, offset: CGSize(width: 200, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.3),
+                // Hold off-screen
+                IdleStep(rotation: 6.0, offset: CGSize(width: 200, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.6),
+                // Peek back
+                IdleStep(rotation: -4.0, offset: CGSize(width: 120, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.25),
+                // Hold peek
+                IdleStep(rotation: -4.0, offset: CGSize(width: 120, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.3),
+                // Slide home
+                IdleStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.3),
+            ]
         case .none:
             steps = []
         }
-        runSequence(steps, requireIdle: false, includeFollowThrough: true)
+        runSequence(steps, requireIdle: false, includeFollowThrough: useFollowThrough)
     }
 
     private func resetIdleVariant() {

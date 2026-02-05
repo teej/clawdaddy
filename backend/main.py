@@ -3,14 +3,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import random
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any, Dict
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
 from backend.openclaw_client import OpenClawClient
-from backend.state import StateManager
+from backend.state import StateManager, SubAgentState
 
 logger = logging.getLogger("clawdaddy")
 if not logger.handlers:
@@ -156,8 +158,18 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     _spawn_background(_set_clawdaddy_idle())
             elif msg_type == "input_response":
                 text = str(data.get("text", "")).strip()
+                sub_agent_id = data.get("sub_agent_id")
                 if text:
-                    logger.info("Input response received text_len=%d", len(text))
+                    logger.info(
+                        "Input response received text_len=%d sub_agent_id=%s",
+                        len(text),
+                        sub_agent_id,
+                    )
+                    if sub_agent_id:
+                        await state_manager.update_sub_agent(
+                            sub_agent_id, state="working", question=None
+                        )
+                        await manager.broadcast_state()
                     try:
                         await openclaw.send_chat(text)
                     except Exception as exc:
@@ -172,3 +184,55 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     except Exception:
         manager.disconnect(websocket)
         raise
+
+
+def _debug_enabled() -> bool:
+    return os.getenv("DEBUG_INJECT", "") == "1"
+
+
+@app.post("/debug/sub-agent")
+async def debug_create_sub_agent(body: Dict[str, Any]) -> Dict[str, Any]:
+    if not _debug_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
+    agent_id = body.get("id") or body.get("agent_id")
+    if not agent_id:
+        raise HTTPException(status_code=400, detail="id is required")
+    state = body.get("state", "working")
+    task_description = body.get("task_description", "debug task")
+    question = body.get("question")
+    result = body.get("result")
+    error = body.get("error")
+
+    snapshot = await state_manager.snapshot()
+    if any(a.id == agent_id for a in snapshot.sub_agents):
+        await state_manager.update_sub_agent(
+            agent_id,
+            state=state,
+            task_description=task_description,
+            question=question,
+            result=result,
+            error=error,
+        )
+    else:
+        await state_manager.add_sub_agent(
+            SubAgentState(
+                id=str(agent_id),
+                state=state,
+                task_description=str(task_description),
+                question=question,
+                result=result,
+                error=error,
+                updated_at=datetime.now(timezone.utc).isoformat(),
+            )
+        )
+    await manager.broadcast_state()
+    return {"ok": True, "agent_id": agent_id, "state": state}
+
+
+@app.post("/debug/sub-agent/{agent_id}/remove")
+async def debug_remove_sub_agent(agent_id: str) -> Dict[str, Any]:
+    if not _debug_enabled():
+        raise HTTPException(status_code=404, detail="Not found")
+    await state_manager.remove_sub_agent(agent_id)
+    await manager.broadcast_state()
+    return {"ok": True, "agent_id": agent_id, "removed": True}

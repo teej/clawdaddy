@@ -1,8 +1,45 @@
 import SwiftUI
 
+struct TypewriterText: View {
+    let text: String
+    let charsPerSecond: Double
+
+    @State private var visibleCount = 0
+    @State private var revealTask: Task<Void, Never>?
+
+    var body: some View {
+        Text(text.prefix(visibleCount))
+            .onAppear {
+                startReveal()
+            }
+            .onDisappear {
+                revealTask?.cancel()
+            }
+            .onChange(of: text) {
+                if text.count > visibleCount {
+                    startReveal()
+                }
+            }
+    }
+
+    private func startReveal() {
+        revealTask?.cancel()
+        let target = text.count
+        guard visibleCount < target else { return }
+        let interval = UInt64(1_000_000_000 / charsPerSecond)
+        revealTask = Task { @MainActor in
+            while visibleCount < target, !Task.isCancelled {
+                visibleCount += 1
+                try? await Task.sleep(nanoseconds: interval)
+            }
+        }
+    }
+}
+
 struct SpeechBubbleView: View {
     let text: String
     let isInteractive: Bool
+    var typewriter: Bool = false
     var onTap: () -> Void
 
     var body: some View {
@@ -16,7 +53,7 @@ struct SpeechBubbleView: View {
         let interactiveStroke = bubbleShape
             .stroke(isInteractive ? Color.blue.opacity(0.7) : Color.clear, lineWidth: 1)
 
-        return Text(text)
+        return textContent
             .font(.system(size: 12, weight: .medium))
             .foregroundColor(.black)
             .multilineTextAlignment(.leading)
@@ -33,6 +70,15 @@ struct SpeechBubbleView: View {
                     onTap()
                 }
             }
+    }
+
+    @ViewBuilder
+    private var textContent: some View {
+        if typewriter {
+            TypewriterText(text: text, charsPerSecond: 60)
+        } else {
+            Text(text)
+        }
     }
 
     private var bubbleShape: RoundedRectangle {

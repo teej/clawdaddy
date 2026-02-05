@@ -39,6 +39,9 @@ struct ContentView: View {
     private var isLayoutSelfTest: Bool {
         ProcessInfo.processInfo.environment["CLAWDADDY_LAYOUT_SELFTEST"] == "1"
     }
+    private var isSubAgentSelfTest: Bool {
+        ProcessInfo.processInfo.environment["CLAWDADDY_SUBAGENT_SELFTEST"] == "1"
+    }
     private var isUITest: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
@@ -55,6 +58,8 @@ struct ContentView: View {
         .onAppear {
             if isLayoutSelfTest {
                 seedBubblesForLayoutTest()
+            } else if isSubAgentSelfTest {
+                seedSubAgentsForSelfTest()
             } else if !isUITest {
                 speech.requestAuthorization()
                 socket.connect()
@@ -86,7 +91,7 @@ struct ContentView: View {
             wasRecording = newValue
         }
         .onChange(of: socket.appState.clawdaddy.lastResponse) { newValue in
-            guard !isLayoutSelfTest else { return }
+            guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, trimmed != lastClawDaddyMessage else { return }
             upsertClawDaddyBubble(text: trimmed)
@@ -96,7 +101,7 @@ struct ContentView: View {
             }
         }
         .onChange(of: socket.appState.clawdaddy.state) { _, newValue in
-            guard !isLayoutSelfTest else { return }
+            guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
             if newValue == "thinking" {
                 setThinkingHold(duration: 2.0)
             }
@@ -104,7 +109,9 @@ struct ContentView: View {
         .onReceive(socket.$appState) { newState in
             guard !isLayoutSelfTest else { return }
             if newState.clawdaddy.lastResponse.isEmpty, newState.subAgents.isEmpty {
-                bubbles.removeAll()
+                withAnimation(.easeOut(duration: 0.25)) {
+                    bubbles.removeAll()
+                }
                 lastAgentMessages.removeAll()
                 lastAgentStates.removeAll()
                 lastClawDaddyMessage = ""
@@ -243,7 +250,7 @@ struct ContentView: View {
             commandTokens = Array(tokens.dropFirst())
         } else if tokens.count >= 2, tokens[0] == "do", tokens[1] == "a" {
             commandTokens = Array(tokens.dropFirst(2))
-        } else if tokens.first == "wink" || tokens.first == "tilt" || tokens.first == "surprised" || tokens.first == "surprise" || tokens.first == "salute" {
+        } else if tokens.first == "wink" || tokens.first == "tilt" || tokens.first == "surprised" || tokens.first == "surprise" || tokens.first == "salute" || tokens.first == "backflip" || tokens.first == "flip" || tokens.first == "plank" || tokens.first == "walk" {
             commandTokens = tokens
         } else {
             return false
@@ -266,6 +273,14 @@ struct ContentView: View {
             saluteTrigger += 1
             return true
         }
+        if command.contains("backflip") || command.contains("flip") {
+            triggerEmote(.backflip)
+            return true
+        }
+        if command.contains("plank") || command.contains("walk") {
+            triggerEmote(.plank)
+            return true
+        }
 
         return false
     }
@@ -278,7 +293,8 @@ struct ContentView: View {
                     ForEach(visibleBubbles) { bubble in
                         SpeechBubbleView(
                             text: bubble.text,
-                            isInteractive: bubble.isInteractive
+                            isInteractive: bubble.isInteractive,
+                            typewriter: !bubble.isInteractive && bubble.agentId == nil
                         ) {
                             if bubble.isInteractive {
                                 pendingInputAgentId = bubble.agentId
@@ -286,6 +302,10 @@ struct ContentView: View {
                             }
                         }
                         .debugBorder(showDebugBorders, color: .purple)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .opacity.combined(with: .move(edge: .top))
+                        ))
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -325,16 +345,20 @@ struct ContentView: View {
                                 showsGlow: false
                             )
                             .debugBorder(showDebugBorders, color: .yellow)
+                            .transition(.scale.combined(with: .opacity))
                         }
                     }
+                    .animation(.spring(response: 0.4, dampingFraction: 0.75), value: socket.appState.subAgents.map(\.id))
                     .debugBorder(showDebugBorders, color: .green)
                 }
                 .frame(maxWidth: 160)
                 .debugBorder(showDebugBorders, color: .pink)
+                .transition(.opacity)
             }
         }
         .padding(bottomRowPadding)
         .debugBorder(showDebugBorders, color: .mint)
+        .animation(.easeInOut(duration: 0.3), value: socket.appState.subAgents.isEmpty)
         .background(
             GeometryReader { proxy in
                 Color.clear.preference(key: BottomRowHeightKey.self, value: proxy.size.height)
@@ -343,15 +367,17 @@ struct ContentView: View {
     }
 
     private func appendBubble(text: String, isInteractive: Bool, agentId: String?) {
-        let item = BubbleItem(id: UUID().uuidString, text: text, isInteractive: isInteractive, agentId: agentId)
-        bubbles.append(item)
-        if bubbles.count > maxBubbles {
-            let overflow = bubbles.count - maxBubbles
-            for _ in 0..<overflow {
-                if let index = bubbles.firstIndex(where: { !$0.isInteractive }) {
-                    bubbles.remove(at: index)
-                } else {
-                    bubbles.removeFirst()
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            let item = BubbleItem(id: UUID().uuidString, text: text, isInteractive: isInteractive, agentId: agentId)
+            bubbles.append(item)
+            if bubbles.count > maxBubbles {
+                let overflow = bubbles.count - maxBubbles
+                for _ in 0..<overflow {
+                    if let index = bubbles.firstIndex(where: { !$0.isInteractive }) {
+                        bubbles.remove(at: index)
+                    } else {
+                        bubbles.removeFirst()
+                    }
                 }
             }
         }
@@ -367,20 +393,22 @@ struct ContentView: View {
             }
         }
 
-        let item = BubbleItem(id: UUID().uuidString, text: text, isInteractive: false, agentId: nil)
-        currentClawDaddyBubbleId = item.id
-        lastClawDaddyMessage = text
-        bubbles.append(item)
-        if bubbles.count > maxBubbles {
-            let overflow = bubbles.count - maxBubbles
-            for _ in 0..<overflow {
-                if let index = bubbles.firstIndex(where: { !$0.isInteractive }) {
-                    if bubbles[index].id == currentClawDaddyBubbleId {
-                        currentClawDaddyBubbleId = nil
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            let item = BubbleItem(id: UUID().uuidString, text: text, isInteractive: false, agentId: nil)
+            currentClawDaddyBubbleId = item.id
+            lastClawDaddyMessage = text
+            bubbles.append(item)
+            if bubbles.count > maxBubbles {
+                let overflow = bubbles.count - maxBubbles
+                for _ in 0..<overflow {
+                    if let index = bubbles.firstIndex(where: { !$0.isInteractive }) {
+                        if bubbles[index].id == currentClawDaddyBubbleId {
+                            currentClawDaddyBubbleId = nil
+                        }
+                        bubbles.remove(at: index)
+                    } else {
+                        bubbles.removeFirst()
                     }
-                    bubbles.remove(at: index)
-                } else {
-                    bubbles.removeFirst()
                 }
             }
         }
@@ -393,6 +421,48 @@ struct ContentView: View {
             BubbleItem(id: "selftest-3", text: "SELFTEST: 3 — longer text that should wrap across multiple lines so we can validate the stack height and clipping behavior.", isInteractive: false, agentId: nil),
             BubbleItem(id: "selftest-4", text: "SELFTEST: 4 — last bubble should sit closest to ClawDaddy.", isInteractive: false, agentId: nil)
         ]
+    }
+
+    private func seedSubAgentsForSelfTest() {
+        let now = ISO8601DateFormatter().string(from: Date())
+        socket.appState = AppState(
+            clawdaddy: .empty,
+            subAgents: [
+                SubAgentState(
+                    id: "selftest-working",
+                    state: "working",
+                    taskDescription: "Searching the depths",
+                    question: nil, result: nil, error: nil,
+                    updatedAt: now
+                ),
+                SubAgentState(
+                    id: "selftest-waiting",
+                    state: "waiting_for_input",
+                    taskDescription: "Needs your input",
+                    question: "What bait should I use?",
+                    result: nil, error: nil,
+                    updatedAt: now
+                ),
+                SubAgentState(
+                    id: "selftest-done",
+                    state: "done",
+                    taskDescription: "Finished scouting",
+                    question: nil,
+                    result: "Found 3 treasure chests!",
+                    error: nil,
+                    updatedAt: now
+                ),
+                SubAgentState(
+                    id: "selftest-error",
+                    state: "error",
+                    taskDescription: "Failed mission",
+                    question: nil, result: nil,
+                    error: "Lost the anchor!",
+                    updatedAt: now
+                ),
+            ]
+        )
+        updateSubAgentBubbles(socket.appState.subAgents)
     }
 
     private func updateSubAgentBubbles(_ agents: [SubAgentState]) {

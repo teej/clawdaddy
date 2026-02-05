@@ -88,21 +88,54 @@ class OpenClawClient:
         self._session_key: Optional[str] = None
         self._current_response: str = ""
         self._connected = False
+        self._sub_agent_cleanup_delay = float(
+            os.getenv("OPENCLAW_SUBAGENT_CLEANUP_DELAY", "8")
+        )
+        self._background_tasks: set[asyncio.Task] = set()
 
     def _connected_message(self) -> str:
-        nautical_lines = [
+        generic = [
             "Welcome aboard.",
             "Standing by at the helm.",
             "Awaiting your command.",
             "Where shall we set course?",
             "Ready for orders, Captain.",
-            "Deck’s clear and ready.",
+            "Deck's clear and ready.",
             "All systems shipshape.",
             "Set the course, Captain.",
             "At your service, Captain.",
-            "What’s the plan, Captain?",
+            "What's the plan, Captain?",
         ]
-        return random.choice(nautical_lines)
+        hour = datetime.now(timezone.utc).astimezone().hour
+        if 5 <= hour < 12:
+            time_pool = [
+                "Good morning, Captain.",
+                "Rise and shine, Captain.",
+                "Morning watch begins.",
+                "Dawn's breaking — ready when you are.",
+            ]
+        elif 12 <= hour < 17:
+            time_pool = [
+                "Good afternoon, Captain.",
+                "Afternoon watch, reporting in.",
+                "Smooth sailing this afternoon.",
+                "Sun's high — what's our heading?",
+            ]
+        elif 17 <= hour < 22:
+            time_pool = [
+                "Good evening, Captain.",
+                "Evening watch, standing by.",
+                "Stars are coming out, Captain.",
+                "Settling in for the evening watch.",
+            ]
+        else:
+            time_pool = [
+                "Burning the midnight oil, Captain?",
+                "Night watch, reporting in.",
+                "Quiet seas tonight, Captain.",
+                "Late night on deck, Captain.",
+            ]
+        return random.choice(time_pool + generic)
 
     async def start(self) -> None:
         if not self._ws_url:
@@ -335,6 +368,23 @@ class OpenClawClient:
             str(task_description),
         )
         await self._broadcast_state()
+
+        if state in {"done", "error"}:
+            self._spawn_background(self._cleanup_sub_agent(str(agent_id)))
+
+    def _spawn_background(self, coro) -> None:
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+
+    async def _cleanup_sub_agent(self, agent_id: str) -> None:
+        await asyncio.sleep(self._sub_agent_cleanup_delay)
+        snapshot = await self._state_manager.snapshot()
+        agent = next((a for a in snapshot.sub_agents if a.id == agent_id), None)
+        if agent and agent.state in {"done", "error"}:
+            await self._state_manager.remove_sub_agent(agent_id)
+            self._logger.info("OpenClaw agent cleanup id=%s", agent_id)
+            await self._broadcast_state()
 
     def _connect_params(
         self,

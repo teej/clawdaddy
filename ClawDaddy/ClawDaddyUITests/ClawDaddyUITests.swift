@@ -51,6 +51,36 @@ final class ClawDaddyUITests: XCTestCase {
     }
 
     @MainActor
+    func testSubAgentSelfTestShowsEmojis() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["CLAWDADDY_SUBAGENT_SELFTEST"] = "1"
+        app.launch()
+
+        // Each sub-agent renders a 🦞 emoji; expect 4
+        let lobsters = app.staticTexts.matching(NSPredicate(format: "label == %@", "🦞"))
+        XCTAssertEqual(lobsters.count, 4, "Expected 4 lobster emojis for 4 sub-agents")
+    }
+
+    @MainActor
+    func testSubAgentSelfTestShowsBubbles() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["CLAWDADDY_SUBAGENT_SELFTEST"] = "1"
+        app.launch()
+
+        // waiting_for_input agent has question bubble
+        let questionBubble = app.staticTexts["What bait should I use?"]
+        XCTAssertTrue(questionBubble.exists, "Expected question bubble for waiting_for_input agent")
+
+        // done agent has result bubble
+        let resultBubble = app.staticTexts["Found 3 treasure chests!"]
+        XCTAssertTrue(resultBubble.exists, "Expected result bubble for done agent")
+
+        // error agent has error bubble
+        let errorBubble = app.staticTexts["Lost the anchor!"]
+        XCTAssertTrue(errorBubble.exists, "Expected error bubble for error agent")
+    }
+
+    @MainActor
     func testLaunchPerformance() throws {
         if #available(macOS 10.15, iOS 13.0, tvOS 13.0, watchOS 7.0, *) {
             // This measures how long it takes to launch your application.
