@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Literal
 
 from pydantic import BaseModel, Field
@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 class ClawDaddyState(BaseModel):
     state: Literal["idle", "listening", "speaking", "thinking"] = "idle"
     last_response: str = ""
+    is_greeting: bool = False
 
 
 class SubAgentState(BaseModel):
@@ -76,4 +77,4 @@ class StateManager:
 
 
 def _now_iso() -> str:
-    return datetime.now().isoformat()
+    return datetime.now(timezone.utc).isoformat()

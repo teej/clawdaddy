@@ -63,11 +63,15 @@ final class SpeechManager: NSObject, ObservableObject {
             if let result {
                 self.lastTranscript = result.bestTranscription.formattedString
                 if result.isFinal {
-                    self.finishRecording(sendTranscript: true)
+                    DispatchQueue.main.async {
+                        self.finishRecording(sendTranscript: true)
+                    }
                 }
             }
             if error != nil {
-                self.finishRecording(sendTranscript: true)
+                DispatchQueue.main.async {
+                    self.finishRecording(sendTranscript: true)
+                }
             }
         }
     }
@@ -119,10 +123,7 @@ final class SpeechManager: NSObject, ObservableObject {
 
         let transcript = lastTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         lastTranscript = ""
-
-        DispatchQueue.main.async {
-            self.isRecording = false
-        }
+        isRecording = false
 
         if sendTranscript, !transcript.isEmpty {
             onTranscript?(transcript)

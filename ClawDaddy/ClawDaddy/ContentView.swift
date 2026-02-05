@@ -34,18 +34,6 @@ struct ContentView: View {
     private let bottomRowPadding = EdgeInsets(top: 0, leading: 0, bottom: 16, trailing: 24)
     private let bubbleSpacing: CGFloat = 10
     private let showDebugBorders = false
-    private let connectedGreetings: Set<String> = [
-        "Welcome aboard.",
-        "Standing by at the helm.",
-        "Awaiting your command.",
-        "Where shall we set course?",
-        "Ready for orders, Captain.",
-        "Deck’s clear and ready.",
-        "All systems shipshape.",
-        "Set the course, Captain.",
-        "At your service, Captain.",
-        "What’s the plan, Captain?",
-    ]
 
     private let pushToTalkKeyCode: UInt16 = 59 // Left Control
     private var isLayoutSelfTest: Bool {
@@ -102,7 +90,7 @@ struct ContentView: View {
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, trimmed != lastClawDaddyMessage else { return }
             upsertClawDaddyBubble(text: trimmed)
-            if connectedGreetings.contains(trimmed) {
+            if socket.appState.clawdaddy.isGreeting {
                 saluteTrigger += 1
                 danceToken += 1
             }

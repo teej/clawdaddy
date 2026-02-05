@@ -9,10 +9,14 @@ import shutil
 import subprocess
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Optional
 
+import base64
+import hashlib
+
 import websockets
+from cryptography.hazmat.primitives import serialization
 from websockets import WebSocketClientProtocol
 from websockets.exceptions import ConnectionClosed
 
@@ -57,7 +61,6 @@ class OpenClawClient:
         ).strip()
         self._api_key = (os.getenv("OPENCLAW_API_KEY") or discovered.api_key or "").strip()
         self._chat_method = os.getenv("OPENCLAW_CHAT_METHOD", "chat.send").strip()
-        self._message_format = os.getenv("OPENCLAW_CHAT_MESSAGE_FORMAT", "text").strip()
         self._idle_delay = float(os.getenv("OPENCLAW_IDLE_DELAY", "1.5"))
         self._debug_events = os.getenv("OPENCLAW_DEBUG_EVENTS", "") == "1"
         self._protocol_min = int(os.getenv("OPENCLAW_PROTOCOL_MIN", "3"))
@@ -125,10 +128,12 @@ class OpenClawClient:
         await self._connect()
 
     async def announce_status(self) -> None:
-        message = self._connected_message() if self._connected else "Connecting to OpenClaw..."
+        is_greeting = self._connected
+        message = self._connected_message() if is_greeting else "Connecting to OpenClaw..."
         await self._state_manager.update_clawdaddy(
             state="speaking",
             last_response=message,
+            is_greeting=is_greeting,
         )
         await self._broadcast_state()
 
@@ -198,6 +203,7 @@ class OpenClawClient:
         await self._state_manager.update_clawdaddy(
             state="speaking",
             last_response=self._connected_message(),
+            is_greeting=True,
         )
         await self._broadcast_state()
         self._schedule_idle()
@@ -207,7 +213,7 @@ class OpenClawClient:
             self._logger.info("OpenClaw socket not connected, reconnecting")
             await self._connect()
 
-    async def _request(self, method: str, payload: dict[str, Any]) -> Any:
+    async def _request(self, method: str, payload: dict[str, Any], timeout: float = 30.0) -> Any:
         if not self._ws:
             raise RuntimeError("OpenClaw WebSocket not connected.")
         req_id = str(uuid.uuid4())
@@ -216,7 +222,11 @@ class OpenClawClient:
         message = {"type": "req", "id": req_id, "method": method, "params": payload}
         self._logger.debug("OpenClaw req %s id=%s", method, req_id)
         await self._ws.send(json.dumps(message))
-        return await future
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError:
+            self._pending.pop(req_id, None)
+            raise RuntimeError(f"OpenClaw request {method} timed out after {timeout}s")
 
     async def _recv_loop(self) -> None:
         assert self._ws is not None
@@ -230,7 +240,6 @@ class OpenClawClient:
                     await self._handle_event(data.get("event"), data.get("payload"))
         except ConnectionClosed:
             self._logger.warning("OpenClaw socket closed")
-            pass
         finally:
             if self._ws:
                 await self._ws.close()
@@ -325,14 +334,6 @@ class OpenClawClient:
             str(task_description),
         )
         await self._broadcast_state()
-
-    def _format_message(self, text: str) -> Any:
-        if self._message_format == "message":
-            return {
-                "role": "user",
-                "content": [{"type": "text", "text": text}],
-            }
-        return text
 
     def _connect_params(
         self,
@@ -464,7 +465,7 @@ def _normalize_agent_state(raw_state: str) -> str:
 
 
 def _now_iso() -> str:
-    return datetime.now().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _discover_openclaw_config() -> OpenClawDiscovery:
@@ -490,17 +491,11 @@ def _discover_via_cli() -> tuple[Optional[str], Optional[str], Optional[str]]:
         return remote_url, remote_token if isinstance(remote_token, str) else None, "token"
 
     port = _cli_get("gateway.port")
-    bind = _cli_get("gateway.bind")
     auth_mode = _cli_get("gateway.auth.mode")
     token = _cli_get("gateway.auth.token") if auth_mode in {None, "token"} else None
     password = _cli_get("gateway.auth.password") if auth_mode == "password" else None
 
-    ws_url = None
-    if port:
-        host = "127.0.0.1"
-        if bind == "lan":
-            host = "127.0.0.1"
-        ws_url = f"ws://{host}:{port}"
+    ws_url = f"ws://127.0.0.1:{port}" if port else None
 
     api_key = None
     if auth_mode == "password":
@@ -532,18 +527,12 @@ def _discover_via_file() -> tuple[Optional[str], Optional[str], Optional[str]]:
             return remote_url, remote_token if isinstance(remote_token, str) else None, "token"
 
     port = gateway.get("port")
-    bind = gateway.get("bind")
     auth = gateway.get("auth", {}) if isinstance(gateway, dict) else {}
     auth_mode = auth.get("mode")
     token = auth.get("token") if auth_mode in {None, "token"} else None
     password = auth.get("password") if auth_mode == "password" else None
 
-    ws_url = None
-    if port:
-        host = "127.0.0.1"
-        if bind == "lan":
-            host = "127.0.0.1"
-        ws_url = f"ws://{host}:{port}"
+    ws_url = f"ws://127.0.0.1:{port}" if port else None
 
     if auth_mode == "password":
         api_key = password if isinstance(password, str) else None
@@ -646,11 +635,6 @@ def _build_device_params(
 
 def _public_key_raw_base64url_from_pem(pem: str) -> Optional[str]:
     try:
-        from cryptography.hazmat.primitives import serialization
-    except Exception:
-        return None
-
-    try:
         public_key = serialization.load_pem_public_key(pem.encode("utf-8"))
         raw = public_key.public_bytes(
             encoding=serialization.Encoding.Raw,
@@ -663,7 +647,6 @@ def _public_key_raw_base64url_from_pem(pem: str) -> Optional[str]:
 
 def _derive_device_id(public_key_base64url: str) -> Optional[str]:
     try:
-        import hashlib
         raw = _base64url_decode(public_key_base64url)
         return hashlib.sha256(raw).hexdigest()
     except Exception:
@@ -701,11 +684,6 @@ def _build_device_auth_payload(
 
 def _sign_payload(private_key_pem: str, payload: str) -> Optional[str]:
     try:
-        from cryptography.hazmat.primitives import serialization
-    except Exception:
-        return None
-
-    try:
         key = serialization.load_pem_private_key(
             private_key_pem.encode("utf-8"), password=None
         )
@@ -718,14 +696,10 @@ def _sign_payload(private_key_pem: str, payload: str) -> Optional[str]:
 
 
 def _base64url_encode(data: bytes) -> str:
-    import base64
-
     return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
 
 
 def _base64url_decode(text: str) -> bytes:
-    import base64
-
     padding = "=" * ((4 - len(text) % 4) % 4)
     return base64.urlsafe_b64decode(text + padding)
 

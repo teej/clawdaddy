@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import random
+from contextlib import asynccontextmanager
 from typing import Any, Dict
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -11,7 +12,6 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from backend.openclaw_client import OpenClawClient
 from backend.state import StateManager
 
-app = FastAPI()
 logger = logging.getLogger("clawdaddy")
 if not logger.handlers:
     logging.basicConfig(
@@ -61,8 +61,10 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket) -> None:
         await websocket.accept()
+        is_first = len(self._connections) == 0
         self._connections.add(websocket)
-        await state_manager.reset_all()
+        if is_first:
+            await state_manager.reset_all()
         await self.broadcast_state()
 
     def disconnect(self, websocket: WebSocket) -> None:
@@ -89,7 +91,14 @@ def _parse_message(text: str) -> Dict[str, Any]:
 
 
 manager = ConnectionManager()
-openclaw = OpenClawClient(state_manager, manager.broadcast_state)
+openclaw: OpenClawClient | None = None
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn_background(coro) -> None:
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 async def _set_clawdaddy_idle(delay_seconds: float = 1.5) -> None:
@@ -98,24 +107,27 @@ async def _set_clawdaddy_idle(delay_seconds: float = 1.5) -> None:
     await manager.broadcast_state()
 
 
+@asynccontextmanager
+async def lifespan(app):
+    global openclaw
+    openclaw = OpenClawClient(state_manager, manager.broadcast_state)
+    await openclaw.start()
+    yield
+    await openclaw.close()
+
+
+app = FastAPI(lifespan=lifespan)
+
+
 @app.get("/health")
 async def health() -> Dict[str, str]:
     return {"status": "ok"}
 
 
-@app.on_event("startup")
-async def startup() -> None:
-    await openclaw.start()
-
-
-@app.on_event("shutdown")
-async def shutdown() -> None:
-    await openclaw.close()
-
-
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
     await manager.connect(websocket)
+    assert openclaw is not None
     await openclaw.announce_status()
     try:
         while True:
@@ -141,7 +153,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                         state="speaking", last_response=f"Error: {exc}"
                     )
                     await manager.broadcast_state()
-                    asyncio.create_task(_set_clawdaddy_idle())
+                    _spawn_background(_set_clawdaddy_idle())
             elif msg_type == "input_response":
                 text = str(data.get("text", "")).strip()
                 if text:
@@ -149,7 +161,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     try:
                         await openclaw.send_chat(text)
                     except Exception as exc:
-                        logger.exception("OpenClaw send failed")
+                        logger.exception("OpenClaw send failed (input_response)")
+                        await state_manager.update_clawdaddy(
+                            state="speaking", last_response=f"Error: {exc}"
+                        )
+                        await manager.broadcast_state()
+                        _spawn_background(_set_clawdaddy_idle())
     except WebSocketDisconnect:
         manager.disconnect(websocket)
     except Exception:

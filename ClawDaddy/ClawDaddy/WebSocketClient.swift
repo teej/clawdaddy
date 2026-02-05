@@ -1,16 +1,21 @@
 import Foundation
+import os
 import SwiftUI
+
+private let logger = Logger(subsystem: "com.teej.ClawDaddy", category: "WebSocket")
 
 struct ClawDaddyState: Codable {
     var state: String
     var lastResponse: String
+    var isGreeting: Bool
 
     enum CodingKeys: String, CodingKey {
         case state
         case lastResponse = "last_response"
+        case isGreeting = "is_greeting"
     }
 
-    static let empty = ClawDaddyState(state: "idle", lastResponse: "")
+    static let empty = ClawDaddyState(state: "idle", lastResponse: "", isGreeting: false)
 }
 
 struct SubAgentState: Codable, Identifiable {
@@ -78,26 +83,33 @@ final class WebSocketClient: ObservableObject {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private var task: URLSessionWebSocketTask?
-    private var isConnected = false
+    private var isConnecting = false
     private var reconnectWorkItem: DispatchWorkItem?
+    private var pingTimer: Timer?
 
     private let url = URL(string: "ws://127.0.0.1:8000/ws")!
 
+    private var isOpen: Bool {
+        task?.state == .running
+    }
+
     func connect() {
-        guard !isConnected else { return }
-        isConnected = true
+        guard !isConnecting, !isOpen else { return }
+        isConnecting = true
 
         task = URLSession.shared.webSocketTask(with: url)
         task?.resume()
         receive()
+        startPingTimer()
     }
 
     func disconnect() {
         reconnectWorkItem?.cancel()
         reconnectWorkItem = nil
+        stopPingTimer()
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
-        isConnected = false
+        isConnecting = false
     }
 
     func sendTranscript(_ text: String) {
@@ -148,19 +160,47 @@ final class WebSocketClient: ObservableObject {
 
     private func handle(_ text: String) {
         guard let data = text.data(using: .utf8) else { return }
-        guard let message = try? decoder.decode(ServerMessage.self, from: data) else { return }
-        if message.type == "state", let state = message.state {
-            DispatchQueue.main.async {
-                self.appState = state
+        do {
+            let message = try decoder.decode(ServerMessage.self, from: data)
+            if message.type == "state", let state = message.state {
+                DispatchQueue.main.async {
+                    self.appState = state
+                }
+            }
+        } catch {
+            logger.error("Failed to decode server message: \(error.localizedDescription)")
+        }
+    }
+
+    private func startPingTimer() {
+        stopPingTimer()
+        DispatchQueue.main.async {
+            self.pingTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+                self?.sendPing()
+            }
+        }
+    }
+
+    private func stopPingTimer() {
+        pingTimer?.invalidate()
+        pingTimer = nil
+    }
+
+    private func sendPing() {
+        task?.sendPing { [weak self] error in
+            if error != nil {
+                self?.scheduleReconnect()
             }
         }
     }
 
     private func scheduleReconnect() {
+        stopPingTimer()
         if reconnectWorkItem != nil {
             return
         }
-        isConnected = false
+        isConnecting = false
+        task = nil
         reconnectWorkItem = DispatchWorkItem { [weak self] in
             self?.reconnectWorkItem = nil
             self?.connect()
