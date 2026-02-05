@@ -7,6 +7,7 @@ struct TypewriterText: View {
 
     @State private var visibleCount = 0
     @State private var revealTask: Task<Void, Never>?
+    @State private var cooldownTask: Task<Void, Never>?
 
     var body: some View {
         Text(text.prefix(visibleCount))
@@ -15,6 +16,7 @@ struct TypewriterText: View {
             }
             .onDisappear {
                 revealTask?.cancel()
+                cooldownTask?.cancel()
                 onRevealChange?(false)
             }
             .onChange(of: text) {
@@ -26,6 +28,7 @@ struct TypewriterText: View {
 
     private func startReveal() {
         revealTask?.cancel()
+        cooldownTask?.cancel()
         let target = text.count
         guard visibleCount < target else { return }
         onRevealChange?(true)
@@ -35,7 +38,14 @@ struct TypewriterText: View {
                 visibleCount += 1
                 try? await Task.sleep(nanoseconds: interval)
             }
-            onRevealChange?(false)
+            guard !Task.isCancelled else { return }
+            // Grace period: if more text arrives within 300ms, startReveal
+            // cancels this task and the false signal never fires.
+            cooldownTask = Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                guard !Task.isCancelled else { return }
+                onRevealChange?(false)
+            }
         }
     }
 }

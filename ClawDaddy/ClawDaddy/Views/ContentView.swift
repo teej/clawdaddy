@@ -9,14 +9,7 @@ struct ContentView: View {
     @State private var showingInput = false
     @State private var pendingInputAgentId: String?
     @State private var wasRecording = false
-    @State private var ackToken = 0
-    @State private var ackStyle: AckStyle = .standard
-    @State private var reactionTrigger = 0
-    @State private var reactionStyle: ReactionStyle = .none
-    @State private var saluteTrigger = 0
-    @State private var emoteTrigger = 0
-    @State private var emoteStyle: EmoteStyle = .none
-    @State private var danceToken = 0
+    @State private var daddyModel = DaddyAnimationModel()
     @State private var bubbles: [BubbleItem] = []
     @State private var lastClawDaddyMessage = ""
     @State private var currentClawDaddyBubbleId: String?
@@ -34,10 +27,13 @@ struct ContentView: View {
     @State private var sleepTask: Task<Void, Never>?
     @State private var isSleeping = false
     @State private var lastInteractionDate = Date()
-    @State private var commandCount = UserDefaults.standard.integer(forKey: "clawdaddy.commandCount")
-    @State private var streakDays = 0
+    @State private var milestones = MilestoneTracker(
+        commandCount: UserDefaults.standard.integer(forKey: "clawdaddy.commandCount"),
+        streakDays: 0
+    )
     @State private var lastColorScheme: ColorScheme?
     @State private var isTypewriterRevealing = false
+    @State private var lastSentAnimState: DaddyAnimState = .idle
     @Environment(\.colorScheme) private var colorScheme
 
     private let maxBubbles = 4
@@ -75,7 +71,7 @@ struct ContentView: View {
                 speech.requestAuthorization()
                 socket.connect()
                 startKeyMonitor()
-                updateStreak()
+                handleMilestone(milestones.updateStreak(), delay: 3.0)
                 resetSleepTimer()
                 lastColorScheme = colorScheme
             }
@@ -98,15 +94,12 @@ struct ContentView: View {
             }
             if wasRecording, !newValue {
                 lastInteractionDate = Date()
-                if lastTranscriptLength > 0 && lastTranscriptLength <= 36 {
-                    ackStyle = .big
-                } else {
-                    ackStyle = .standard
-                }
-                ackToken += 1
-                trackCommand()
+                let style: AckStyle = (lastTranscriptLength > 0 && lastTranscriptLength <= 36) ? .big : .standard
+                daddyModel.send(.acknowledge(style))
+                handleMilestone(milestones.trackCommand(), delay: 1.5)
             }
             wasRecording = newValue
+            syncAnimState()
         }
         .onChange(of: socket.appState.clawdaddy.lastResponse) { newValue in
             guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
@@ -114,11 +107,11 @@ struct ContentView: View {
             guard !trimmed.isEmpty, trimmed != lastClawDaddyMessage else { return }
             upsertClawDaddyBubble(text: trimmed)
             if socket.appState.clawdaddy.isReunion {
-                triggerEmote(.surprised)
-                danceToken += 1
+                daddyModel.send(.emote(.surprised))
+                daddyModel.send(.dance)
             } else if socket.appState.clawdaddy.isGreeting {
-                saluteTrigger += 1
-                danceToken += 1
+                daddyModel.send(.salute)
+                daddyModel.send(.dance)
             }
         }
         .onChange(of: socket.appState.clawdaddy.state) { _, newValue in
@@ -126,6 +119,7 @@ struct ContentView: View {
             if newValue == "thinking" {
                 setThinkingHold(duration: 2.0)
             }
+            syncAnimState()
         }
         .onReceive(socket.$appState) { newState in
             guard !isLayoutSelfTest else { return }
@@ -152,34 +146,46 @@ struct ContentView: View {
             }
             lastColorScheme = newScheme
             if newScheme == .dark {
-                triggerReaction(.settle)
+                daddyModel.send(.reaction(.settle))
             } else {
-                triggerReaction(.perk)
+                daddyModel.send(.reaction(.perk))
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didMoveNotification)) { _ in
             let now = Date()
             guard now.timeIntervalSince(lastWindowDragReaction) > 5 else { return }
             lastWindowDragReaction = now
-            triggerReaction(.alert)
+            daddyModel.send(.reaction(.alert))
+        }
+        .onChange(of: isSleeping) { _ in syncAnimState() }
+        .onChange(of: speech.isSpeaking) { _ in syncAnimState() }
+        .onChange(of: isTypewriterRevealing) { newValue in
+            daddyModel.send(.talkingChanged(newValue))
         }
     }
 
-    private var effectiveClawDaddyState: String {
+    private var effectiveClawDaddyState: DaddyAnimState {
         if speech.isRecording {
-            return "listening"
+            return .listening
         }
         if let hold = thinkingHoldUntil, hold > Date() {
-            return "thinking"
+            return .thinking
         }
         if speech.isSpeaking {
-            return "speaking"
+            return .speaking
         }
         let socketState = socket.appState.clawdaddy.state
         if socketState == "idle" && isSleeping {
-            return "sleeping"
+            return .sleeping
         }
-        return socketState
+        switch socketState {
+        case "listening": return .listening
+        case "thinking": return .thinking
+        case "speaking": return .speaking
+        case "waiting_for_input": return .waitingForInput
+        case "sleeping": return .sleeping
+        default: return .idle
+        }
     }
 
     private struct BubbleItem: Identifiable {
@@ -238,7 +244,7 @@ struct ContentView: View {
                 let now = Date()
                 guard now.timeIntervalSince(lastProximityReaction) > 10 else { return }
                 lastProximityReaction = now
-                triggerReaction(.perk)
+                daddyModel.send(.reaction(.perk))
             }
         }
     }
@@ -276,22 +282,21 @@ struct ContentView: View {
         bubbles.contains { $0.isInteractive }
     }
 
-    private func triggerReaction(_ style: ReactionStyle) {
-        reactionStyle = style
-        reactionTrigger += 1
-    }
-
-    private func triggerEmote(_ style: EmoteStyle) {
-        emoteStyle = style
-        emoteTrigger += 1
+    private func syncAnimState() {
+        let state = effectiveClawDaddyState
+        guard state != lastSentAnimState else { return }
+        lastSentAnimState = state
+        daddyModel.send(.stateChanged(state))
     }
 
     private func setThinkingHold(duration: TimeInterval) {
         let target = Date().addingTimeInterval(duration)
         thinkingHoldUntil = target
+        syncAnimState()
         DispatchQueue.main.asyncAfter(deadline: .now() + duration) {
             if thinkingHoldUntil == target {
                 thinkingHoldUntil = nil
+                syncAnimState()
             }
         }
     }
@@ -319,55 +324,55 @@ struct ContentView: View {
 
         let command = commandTokens.joined(separator: " ")
         if command.contains("wink") {
-            triggerEmote(.wink)
+            daddyModel.send(.emote(.wink))
             return true
         }
         if command.contains("tilt") || command.contains("head tilt") {
-            triggerEmote(.tilt)
+            daddyModel.send(.emote(.tilt))
             return true
         }
         if command.contains("surprise") || command.contains("surprised") {
-            triggerEmote(.surprised)
+            daddyModel.send(.emote(.surprised))
             return true
         }
         if command.contains("salute") {
-            saluteTrigger += 1
+            daddyModel.send(.salute)
             return true
         }
         if command.contains("backflip") || command.contains("flip") {
-            triggerEmote(.backflip)
+            daddyModel.send(.emote(.backflip))
             return true
         }
         if command.contains("plank") || command.contains("walk") {
-            triggerEmote(.plank)
+            daddyModel.send(.emote(.plank))
             return true
         }
         if command.contains("play dead") || command.contains("dead") {
-            triggerEmote(.playDead)
+            daddyModel.send(.emote(.playDead))
             return true
         }
         if command.contains("spin") {
-            triggerEmote(.spin)
+            daddyModel.send(.emote(.spin))
             return true
         }
         if command.contains("crab") || command.contains("rave") {
-            triggerEmote(.crabRave)
+            daddyModel.send(.emote(.crabRave))
             return true
         }
         if command.contains("dance") {
-            danceToken += 1
+            daddyModel.send(.dance)
             return true
         }
         if command.contains("nod") {
-            triggerEmote(.nod)
+            daddyModel.send(.emote(.nod))
             return true
         }
         if command.contains("shake") {
-            triggerEmote(.shake)
+            daddyModel.send(.emote(.shake))
             return true
         }
         if command.contains("bow") {
-            triggerEmote(.bow)
+            daddyModel.send(.emote(.bow))
             return true
         }
 
@@ -412,19 +417,7 @@ struct ContentView: View {
 
     private var bottomRow: some View {
         HStack(spacing: 12) {
-            DaddyView(
-                state: effectiveClawDaddyState,
-                size: 126,
-                jumpTrigger: ackToken,
-                ackStyle: ackStyle,
-                reactionStyle: reactionStyle,
-                reactionTrigger: reactionTrigger,
-                saluteTrigger: saluteTrigger,
-                emoteStyle: emoteStyle,
-                emoteTrigger: emoteTrigger,
-                danceTrigger: danceToken,
-                isTalking: isTypewriterRevealing
-            )
+            DaddyView(model: daddyModel, size: 126)
             .debugBorder(showDebugBorders, color: .red)
 
             if !socket.appState.subAgents.isEmpty {
@@ -569,16 +562,16 @@ struct ContentView: View {
             if !didTriggerReaction, previousState != agent.state {
                 switch agent.state {
                 case "working":
-                    triggerReaction(.perk)
+                    daddyModel.send(.reaction(.perk))
                     didTriggerReaction = true
                 case "waiting_for_input":
-                    triggerReaction(.alert)
+                    daddyModel.send(.reaction(.alert))
                     didTriggerReaction = true
                 case "done":
-                    triggerReaction(.settle)
+                    daddyModel.send(.reaction(.settle))
                     didTriggerReaction = true
                 case "error":
-                    triggerReaction(.alert)
+                    daddyModel.send(.reaction(.alert))
                     didTriggerReaction = true
                 default:
                     break
@@ -611,72 +604,19 @@ struct ContentView: View {
         }
     }
 
-    private func updateStreak() {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let key = "clawdaddy.lastOpenDate"
-        let streakKey = "clawdaddy.streakDays"
-
-        if let lastDate = UserDefaults.standard.object(forKey: key) as? Date {
-            let lastDay = calendar.startOfDay(for: lastDate)
-            let diff = calendar.dateComponents([.day], from: lastDay, to: today).day ?? 0
-            if diff == 1 {
-                streakDays = UserDefaults.standard.integer(forKey: streakKey) + 1
-            } else if diff == 0 {
-                streakDays = max(1, UserDefaults.standard.integer(forKey: streakKey))
-            } else {
-                streakDays = 1
+    private func handleMilestone(_ reward: MilestoneReward?, delay: Double) {
+        guard let reward else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            appendBubble(text: reward.message, isInteractive: false, agentId: nil)
+            if let emote = reward.emote {
+                daddyModel.send(.emote(emote))
             }
-        } else {
-            streakDays = 1
-        }
-        UserDefaults.standard.set(today, forKey: key)
-        UserDefaults.standard.set(streakDays, forKey: streakKey)
-        checkStreak()
-    }
-
-    private func checkStreak() {
-        let milestones: [Int: String] = [
-            3: "Three days at sea, cap'n. Getting our sea legs.",
-            7: "A full week on the water! Ye be a true sailor.",
-            14: "Two weeks! The crew's never been sharper.",
-            30: "A month! The crew salutes ye, cap'n.",
-        ]
-        guard let message = milestones[streakDays] else { return }
-        let achieved = UserDefaults.standard.stringArray(forKey: "clawdaddy.streakMilestones") ?? []
-        let key = String(streakDays)
-        guard !achieved.contains(key) else { return }
-        UserDefaults.standard.set(achieved + [key], forKey: "clawdaddy.streakMilestones")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            appendBubble(text: message, isInteractive: false, agentId: nil)
-            if streakDays >= 30 {
-                saluteTrigger += 1
-                danceToken += 1
+            if reward.salute {
+                daddyModel.send(.salute)
             }
-        }
-    }
-
-    private func trackCommand() {
-        commandCount += 1
-        UserDefaults.standard.set(commandCount, forKey: "clawdaddy.commandCount")
-        let milestones: [Int: (String, EmoteStyle?)] = [
-            10: ("Tenth order, cap'n! The crew remembers every one.", nil),
-            50: ("Fifty orders! This ship runs like clockwork.", nil),
-            100: ("A hundred orders! Ye run a tight ship.", .backflip),
-            500: ("Five hundred! Cap'n of the century.", .spin),
-            1000: ("A THOUSAND. Captain legend.", .backflip),
-        ]
-        guard let (message, emote) = milestones[commandCount] else { return }
-        let achieved = UserDefaults.standard.stringArray(forKey: "clawdaddy.commandMilestones") ?? []
-        let key = String(commandCount)
-        guard !achieved.contains(key) else { return }
-        UserDefaults.standard.set(achieved + [key], forKey: "clawdaddy.commandMilestones")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            appendBubble(text: message, isInteractive: false, agentId: nil)
-            if let emote {
-                triggerEmote(emote)
+            if reward.dance {
+                daddyModel.send(.dance)
             }
-            danceToken += 1
         }
     }
 
@@ -690,148 +630,6 @@ struct ContentView: View {
             return agent.error
         default:
             return nil
-        }
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func debugBorder(_ enabled: Bool, color: Color) -> some View {
-        if enabled {
-            self.overlay(Rectangle().stroke(color, lineWidth: 1))
-        } else {
-            self
-        }
-    }
-}
-
-private struct BottomRowHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = max(value, nextValue())
-    }
-}
-
-
-struct InputSheet: View {
-    @Binding var inputText: String
-    var onSubmit: () -> Void
-    var onCancel: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Add a quick reply")
-                .font(.headline)
-
-            TextField("Type your answer...", text: $inputText)
-                .textFieldStyle(.roundedBorder)
-
-            HStack {
-                Button("Cancel", action: onCancel)
-                Spacer()
-                Button("Send", action: onSubmit)
-                    .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(20)
-        .frame(width: 320)
-    }
-}
-
-struct WindowConfigurator: NSViewRepresentable {
-    @Binding var windowSize: CGSize
-    let isInteractive: Bool
-
-    func makeNSView(context: Context) -> WindowConfigView {
-        let view = WindowConfigView()
-        view.onWindowChange = { window in
-            configure(window, coordinator: context.coordinator)
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: WindowConfigView, context: Context) {
-        nsView.onWindowChange = { window in
-            configure(window, coordinator: context.coordinator)
-        }
-        if let window = nsView.window {
-            configure(window, coordinator: context.coordinator)
-        }
-    }
-
-    private func configure(_ window: NSWindow, coordinator: Coordinator) {
-        if !coordinator.didConfigure {
-            coordinator.didConfigure = true
-
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            window.level = .floating
-            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            window.titleVisibility = .hidden
-            window.titlebarAppearsTransparent = true
-            window.isMovableByWindowBackground = true
-            window.hasShadow = false
-            window.standardWindowButton(.closeButton)?.isHidden = true
-            window.standardWindowButton(.miniaturizeButton)?.isHidden = true
-            window.standardWindowButton(.zoomButton)?.isHidden = true
-            window.isRestorable = false
-            window.setFrameAutosaveName("")
-
-            let targetScreen = NSScreen.main ?? NSScreen.screens.first
-            let size = preferredWindowSize(for: targetScreen)
-            positionWindow(window, size: size, screen: targetScreen)
-            DispatchQueue.main.async {
-                if windowSize != size {
-                    windowSize = size
-                }
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                positionWindow(window, size: size, screen: targetScreen)
-            }
-        }
-
-        window.ignoresMouseEvents = !isInteractive
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    final class Coordinator {
-        var didConfigure = false
-    }
-
-    private func positionWindow(_ window: NSWindow, size: NSSize, screen: NSScreen?) {
-        guard let screen else { return }
-        window.setContentSize(size)
-        let contentRect = NSRect(origin: .zero, size: size)
-        let frameRect = window.frameRect(forContentRect: contentRect)
-        let frame = screen.visibleFrame
-        let insetX: CGFloat = 32
-        let insetY: CGFloat = 32
-        let origin = NSPoint(
-            x: frame.maxX - frameRect.width - insetX,
-            y: frame.minY + insetY
-        )
-        window.setFrame(NSRect(origin: origin, size: frameRect.size), display: true)
-    }
-
-    private func preferredWindowSize(for screen: NSScreen?) -> NSSize {
-        guard let screen else { return NSSize(width: 320, height: 220) }
-        let frame = screen.visibleFrame
-        let height = max(220, frame.height * 0.5)
-        return NSSize(width: 320, height: height)
-    }
-}
-
-final class WindowConfigView: NSView {
-    var onWindowChange: ((NSWindow) -> Void)?
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        if let window {
-            onWindowChange?(window)
         }
     }
 }
