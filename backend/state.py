@@ -11,6 +11,7 @@ class ClawDaddyState(BaseModel):
     state: Literal["idle", "listening", "speaking", "thinking"] = "idle"
     last_response: str = ""
     is_greeting: bool = False
+    is_reunion: bool = False
 
 
 class SubAgentState(BaseModel):

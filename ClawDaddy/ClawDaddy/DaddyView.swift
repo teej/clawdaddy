@@ -19,6 +19,12 @@ enum EmoteStyle: Int {
     case surprised
     case backflip
     case plank
+    case playDead
+    case spin
+    case crabRave
+    case nod
+    case shake
+    case bow
 }
 
 struct DaddyView: View {
@@ -32,6 +38,7 @@ struct DaddyView: View {
     let emoteStyle: EmoteStyle
     let emoteTrigger: Int
     let danceTrigger: Int
+    let isTalking: Bool
 
     @State private var breathPhase = false
     @State private var didStartBreathing = false
@@ -49,6 +56,10 @@ struct DaddyView: View {
     @State private var isSaluting = false
     @State private var spriteOverride: String?
     @State private var spriteOverrideToken = 0
+    @State private var talkTask: Task<Void, Never>?
+    @State private var talkMouthOpen = false
+    @State private var waitingPhase = false
+    @State private var waitingTask: Task<Void, Never>?
 
     var body: some View {
         Image(currentImageName)
@@ -56,7 +67,6 @@ struct DaddyView: View {
             .scaledToFit()
             .frame(width: size, height: size)
             .scaleEffect(x: finalScaleX, y: finalScaleY, anchor: animationPivot)
-            .opacity(opacity)
             .rotationEffect(finalRotation, anchor: animationPivot)
             .offset(finalOffset)
             .shadow(color: glowColor, radius: glowRadius)
@@ -80,14 +90,22 @@ struct DaddyView: View {
                 thinkingTask = nil
                 thinkingMotionTask?.cancel()
                 thinkingMotionTask = nil
+                talkTask?.cancel()
+                talkTask = nil
+                waitingTask?.cancel()
+                waitingTask = nil
             }
             .onChange(of: state) { _, newValue in
+                let wasSleeping = viewState == "sleeping"
                 viewState = newValue
-                if newValue != "idle" {
+                if newValue != "idle" && newValue != "sleeping" {
                     resetIdleVariant()
                     isPlayingVariant = false
                 }
                 if newValue == "listening" {
+                    if wasSleeping {
+                        playWakeUp()
+                    }
                     startListeningMotion()
                 } else {
                     listeningPhase = false
@@ -101,6 +119,16 @@ struct DaddyView: View {
                     thinkingTask = nil
                     thinkingMotionTask?.cancel()
                     thinkingMotionTask = nil
+                }
+                if newValue != "speaking" {
+                    stopTalkCycling()
+                }
+                if newValue == "waiting_for_input" {
+                    startWaitingMotion()
+                } else {
+                    waitingPhase = false
+                    waitingTask?.cancel()
+                    waitingTask = nil
                 }
             }
             .onChange(of: jumpTrigger) { _ in
@@ -117,6 +145,13 @@ struct DaddyView: View {
             }
             .onChange(of: danceTrigger) { _ in
                 playDance()
+            }
+            .onChange(of: isTalking) { _, newValue in
+                if newValue && isSpeaking {
+                    startTalkCycling()
+                } else {
+                    stopTalkCycling()
+                }
             }
     }
 
@@ -136,6 +171,10 @@ struct DaddyView: View {
         state == "waiting_for_input"
     }
 
+    private var isSleeping: Bool {
+        state == "sleeping"
+    }
+
     private var animationPivot: UnitPoint {
         .center
     }
@@ -147,16 +186,21 @@ struct DaddyView: View {
         if isSaluting {
             return "DaddySalute"
         }
+        if isSpeaking && talkMouthOpen {
+            return "DaddyTalk"
+        }
         return "Daddy"
     }
 
     private var breathScale: CGFloat {
-        breathPhase ? 1.008 : 0.996
+        let amplitude: CGFloat = isSleeping ? 0.004 : 0.008
+        return breathPhase ? (1.0 + amplitude) : (1.0 - amplitude)
     }
 
     private var breathRotation: Double {
-        guard viewState == "idle" else { return 0 }
-        return breathPhase ? 0.25 : -0.25
+        guard viewState == "idle" || viewState == "sleeping" else { return 0 }
+        let amplitude = isSleeping ? 0.15 : 0.25
+        return breathPhase ? amplitude : -amplitude
     }
 
     private var listeningScale: CGFloat {
@@ -169,29 +213,22 @@ struct DaddyView: View {
     }
 
     private var finalScaleX: CGFloat {
-        breathScale * idleScaleX * listeningScale * thinkingScale
+        breathScale * idleScaleX * listeningScale * thinkingScale * speakingScaleX
     }
 
     private var finalScaleY: CGFloat {
-        breathScale * idleScaleY * listeningScale * thinkingScale
-    }
-
-    private var opacity: Double {
-        if isSpeaking {
-            return breathPhase ? 1.0 : 0.92
-        }
-        return 1.0
+        breathScale * idleScaleY * listeningScale * thinkingScale * speakingScaleY
     }
 
     private var finalRotation: Angle {
-        Angle(degrees: idleRotation + listeningRotation + thinkingRotation + breathRotation)
+        Angle(degrees: idleRotation + listeningRotation + thinkingRotation + breathRotation + speakingRotation + waitingRotation)
     }
 
     private var finalOffset: CGSize {
         let listenOffset = CGSize(width: 0, height: isListening ? -2 : 0)
         return CGSize(
-            width: idleOffset.width + listenOffset.width + listeningOffset.width + thinkingOffset.width,
-            height: idleOffset.height + listenOffset.height + listeningOffset.height + thinkingOffset.height
+            width: idleOffset.width + listenOffset.width + listeningOffset.width + thinkingOffset.width + speakingOffset.width + waitingOffset.width,
+            height: idleOffset.height + listenOffset.height + listeningOffset.height + thinkingOffset.height + speakingOffset.height + waitingOffset.height
         )
     }
 
@@ -219,7 +256,7 @@ struct DaddyView: View {
 
     private var thinkingRotation: Double {
         guard isThinking, !isPlayingVariant else { return 0 }
-        return 0
+        return thinkingPhase ? 1.5 : -1.5
     }
 
     private var listeningOffset: CGSize {
@@ -229,7 +266,37 @@ struct DaddyView: View {
 
     private var thinkingOffset: CGSize {
         guard isThinking, !isPlayingVariant else { return .zero }
-        return thinkingPhase ? CGSize(width: 0, height: 2) : CGSize(width: 0, height: -2)
+        return thinkingPhase ? CGSize(width: 1, height: 3) : CGSize(width: -1, height: -3)
+    }
+
+    private var speakingScaleX: CGFloat {
+        guard isSpeaking else { return 1.0 }
+        return talkMouthOpen ? 1.01 : 0.995
+    }
+
+    private var speakingScaleY: CGFloat {
+        guard isSpeaking else { return 1.0 }
+        return talkMouthOpen ? 0.985 : 1.005
+    }
+
+    private var speakingOffset: CGSize {
+        guard isSpeaking else { return .zero }
+        return talkMouthOpen ? CGSize(width: 0, height: 1.5) : CGSize(width: 0, height: -0.5)
+    }
+
+    private var speakingRotation: Double {
+        guard isSpeaking else { return 0 }
+        return talkMouthOpen ? 0.4 : -0.4
+    }
+
+    private var waitingRotation: Double {
+        guard isWaiting, !isPlayingVariant else { return 0 }
+        return waitingPhase ? 2.0 : -2.0
+    }
+
+    private var waitingOffset: CGSize {
+        guard isWaiting, !isPlayingVariant else { return .zero }
+        return waitingPhase ? CGSize(width: 2, height: 0) : CGSize(width: -2, height: 0)
     }
 
     private func startBreathing() {
@@ -243,17 +310,34 @@ struct DaddyView: View {
         idleTask?.cancel()
         idleTask = Task {
             while !Task.isCancelled {
-                let delay = Double.random(in: 12.0...20.0)
+                let sleeping = await MainActor.run { viewState == "sleeping" }
+                let delay = sleeping
+                    ? Double.random(in: 30.0...60.0)
+                    : Double.random(in: 12.0...20.0)
                 try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 await MainActor.run {
-                    guard viewState == "idle" else { return }
-                    playIdleVariant()
+                    if viewState == "sleeping" {
+                        playSleepyBob()
+                    } else if viewState == "idle" {
+                        playIdleVariant()
+                    }
                 }
             }
         }
     }
 
     private func startListeningMotion() {
+        // Anticipation squash — quick duck before listening sway
+        withAnimation(.easeOut(duration: 0.08)) {
+            idleScaleX = 1.06
+            idleScaleY = 0.94
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            withAnimation(.easeOut(duration: 0.08)) {
+                idleScaleX = 1.0
+                idleScaleY = 1.0
+            }
+        }
         listeningPhase = false
         withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
             listeningPhase = true
@@ -290,12 +374,50 @@ struct DaddyView: View {
         }
     }
 
+    private func startTalkCycling() {
+        talkMouthOpen = false
+        talkTask?.cancel()
+        talkTask = Task {
+            while !Task.isCancelled {
+                await MainActor.run {
+                    talkMouthOpen.toggle()
+                }
+                let interval = UInt64.random(in: 120_000_000...180_000_000)
+                try? await Task.sleep(nanoseconds: interval)
+            }
+        }
+    }
+
+    private func stopTalkCycling() {
+        talkTask?.cancel()
+        talkTask = nil
+        talkMouthOpen = false
+    }
+
+    private func startWaitingMotion() {
+        waitingTask?.cancel()
+        waitingPhase = false
+        waitingTask = Task {
+            while !Task.isCancelled {
+                await MainActor.run {
+                    withAnimation(.easeInOut(duration: 0.8)) {
+                        waitingPhase.toggle()
+                    }
+                }
+                try? await Task.sleep(nanoseconds: 800_000_000)
+            }
+        }
+    }
+
     private func playIdleVariant() {
         if isPlayingVariant {
             return
         }
         let roll = Double.random(in: 0...1)
-        if roll < 0.15 {
+        if roll < 0.03 {
+            // Ultra-rare spontaneous mischief
+            playEmote(style: .plank)
+        } else if roll < 0.15 {
             playRareIdle()
         } else if roll < 0.55 {
             playCommonIdle()
@@ -319,7 +441,7 @@ struct DaddyView: View {
         var delay: Double = 0
         for step in sequence {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                if requireIdle && viewState != "idle" {
+                if requireIdle && viewState != "idle" && viewState != "sleeping" {
                     return
                 }
                 guard isPlayingVariant else { return }
@@ -334,7 +456,7 @@ struct DaddyView: View {
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            if !requireIdle || viewState == "idle" {
+            if !requireIdle || viewState == "idle" || viewState == "sleeping" {
                 resetIdleVariant()
             }
             isPlayingVariant = false
@@ -365,25 +487,31 @@ struct DaddyView: View {
 
     private func playCommonIdle() {
         isPlayingVariant = true
-        let choice = Int.random(in: 0...1)
+        let choice = Int.random(in: 0...2)
         switch choice {
         case 0:
             playDrift()
-        default:
+        case 1:
             playSoftBob()
+        default:
+            playStretch()
         }
     }
 
     private func playRareIdle() {
         isPlayingVariant = true
-        let choice = Int.random(in: 0...2)
+        let choice = Int.random(in: 0...4)
         switch choice {
         case 0:
             playAnchorDrop()
         case 1:
             playProudSwing()
-        default:
+        case 2:
             playHeadTilt()
+        case 3:
+            playPeek()
+        default:
+            playShimmy()
         }
     }
 
@@ -449,6 +577,44 @@ struct DaddyView: View {
         )
     }
 
+    private func playStretch() {
+        runSequence(
+            [
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: -5), scaleX: 0.96, scaleY: 1.06, duration: 0.3),
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: -3), scaleX: 0.97, scaleY: 1.04, duration: 0.4),
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: 3), scaleX: 1.04, scaleY: 0.97, duration: 0.2),
+                IdleStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.25),
+            ],
+            requireIdle: true,
+            includeFollowThrough: true
+        )
+    }
+
+    private func playPeek() {
+        runSequence(
+            [
+                IdleStep(rotation: -4.0, offset: CGSize(width: -6, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.2),
+                IdleStep(rotation: -6.0, offset: CGSize(width: -10, height: -2), scaleX: 1.0, scaleY: 1.0, duration: 0.3),
+                IdleStep(rotation: -4.0, offset: CGSize(width: -6, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.15),
+                IdleStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.2),
+            ],
+            requireIdle: true,
+            includeFollowThrough: true
+        )
+    }
+
+    private func playShimmy() {
+        runSequence(
+            [
+                IdleStep(rotation: -3.0, offset: CGSize(width: -2, height: 0), scaleX: 1.02, scaleY: 0.98, duration: 0.1),
+                IdleStep(rotation: 3.0, offset: CGSize(width: 2, height: 0), scaleX: 1.02, scaleY: 0.98, duration: 0.1),
+                IdleStep(rotation: -2.0, offset: CGSize(width: -1, height: 0), scaleX: 1.01, scaleY: 0.99, duration: 0.1),
+                IdleStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.15),
+            ],
+            requireIdle: true
+        )
+    }
+
     private func playAcknowledge(style: AckStyle) {
         resetIdleVariant()
         isPlayingVariant = true
@@ -485,6 +651,7 @@ struct DaddyView: View {
     private func playDance() {
         resetIdleVariant()
         isPlayingVariant = true
+        flashSprite("DaddyExcited", duration: 1.0)
         runSequence(
             [
                 IdleStep(rotation: -8.0, offset: CGSize(width: -4, height: 0), scaleX: 1.04, scaleY: 0.98, duration: 0.12),
@@ -553,6 +720,34 @@ struct DaddyView: View {
         }
     }
 
+    private func playSleepyBob() {
+        if isPlayingVariant { return }
+        isPlayingVariant = true
+        runSequence(
+            [
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: 1), scaleX: 1.01, scaleY: 0.99, duration: 0.5),
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: -1), scaleX: 0.99, scaleY: 1.01, duration: 0.6),
+                IdleStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.4),
+            ],
+            requireIdle: true
+        )
+    }
+
+    private func playWakeUp() {
+        resetIdleVariant()
+        isPlayingVariant = true
+        flashSprite("DaddySurprised", duration: 0.3)
+        runSequence(
+            [
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: -8), scaleX: 0.96, scaleY: 1.08, duration: 0.12),
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: -4), scaleX: 0.95, scaleY: 1.1, duration: 0.2),
+                IdleStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.16),
+            ],
+            requireIdle: false,
+            includeFollowThrough: true
+        )
+    }
+
     private func playEmote(style: EmoteStyle) {
         guard style != .none else { return }
         guard !isPlayingVariant else { return }
@@ -596,19 +791,98 @@ struct DaddyView: View {
             ]
         case .plank:
             useFollowThrough = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) { [self] in
+                flashSprite("DaddySurprised", duration: 0.55)
+            }
             steps = [
-                // Lean right
                 IdleStep(rotation: 4.0, offset: CGSize(width: 10, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.2),
-                // Slide off window edge
                 IdleStep(rotation: 6.0, offset: CGSize(width: 200, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.3),
-                // Hold off-screen
                 IdleStep(rotation: 6.0, offset: CGSize(width: 200, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.6),
-                // Peek back
                 IdleStep(rotation: -4.0, offset: CGSize(width: 120, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.25),
-                // Hold peek
                 IdleStep(rotation: -4.0, offset: CGSize(width: 120, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.3),
-                // Slide home
                 IdleStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.3),
+            ]
+        case .playDead:
+            useFollowThrough = false
+            flashSprite("DaddyDead", duration: 2.8)
+            steps = [
+                // Startled lean
+                IdleStep(rotation: -5.0, offset: CGSize(width: 0, height: -4), scaleX: 1.04, scaleY: 0.96, duration: 0.12),
+                // Fall sideways
+                IdleStep(rotation: 90.0, offset: CGSize(width: 20, height: 8), scaleX: 1.0, scaleY: 1.0, duration: 0.25),
+                // Hold dead
+                IdleStep(rotation: 90.0, offset: CGSize(width: 20, height: 8), scaleX: 1.0, scaleY: 1.0, duration: 2.0),
+                // Peek (slight rotation back)
+                IdleStep(rotation: 70.0, offset: CGSize(width: 16, height: 6), scaleX: 1.0, scaleY: 1.0, duration: 0.2),
+                // Pop back up
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: -6), scaleX: 0.96, scaleY: 1.06, duration: 0.18),
+                // Settle
+                IdleStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.15),
+            ]
+        case .spin:
+            useFollowThrough = false
+            // Flash dizzy sprite after the spin lands (0.78s in), lasting through wobble + settle
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.78) { [self] in
+                flashSprite("DaddyDizzy", duration: 0.48)
+            }
+            steps = [
+                // Anticipation squash
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: 4), scaleX: 1.08, scaleY: 0.92, duration: 0.1),
+                // First 360
+                IdleStep(rotation: 360.0, offset: CGSize(width: 0, height: -15), scaleX: 0.96, scaleY: 1.04, duration: 0.3),
+                // Second 360 (720 total)
+                IdleStep(rotation: 720.0, offset: CGSize(width: 0, height: -10), scaleX: 0.98, scaleY: 1.02, duration: 0.28),
+                // Landing squash
+                IdleStep(rotation: 720.0, offset: CGSize(width: 0, height: 5), scaleX: 1.1, scaleY: 0.9, duration: 0.1),
+                // Dizzy wobble
+                IdleStep(rotation: 725.0, offset: CGSize(width: 3, height: 0), scaleX: 1.02, scaleY: 0.98, duration: 0.15),
+                IdleStep(rotation: 715.0, offset: CGSize(width: -3, height: 0), scaleX: 1.02, scaleY: 0.98, duration: 0.15),
+                // Settle
+                IdleStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.18),
+            ]
+        case .crabRave:
+            useFollowThrough = false
+            flashSprite("DaddyExcited", duration: 1.1)
+            steps = [
+                // Rapid shimmy
+                IdleStep(rotation: -10.0, offset: CGSize(width: -6, height: -2), scaleX: 1.04, scaleY: 0.98, duration: 0.08),
+                IdleStep(rotation: 10.0, offset: CGSize(width: 6, height: -2), scaleX: 1.04, scaleY: 0.98, duration: 0.08),
+                IdleStep(rotation: -12.0, offset: CGSize(width: -8, height: -4), scaleX: 1.06, scaleY: 0.96, duration: 0.08),
+                IdleStep(rotation: 12.0, offset: CGSize(width: 8, height: -4), scaleX: 1.06, scaleY: 0.96, duration: 0.08),
+                // Big bounce
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: 6), scaleX: 1.12, scaleY: 0.88, duration: 0.1),
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: -14), scaleX: 0.94, scaleY: 1.14, duration: 0.16),
+                // More shimmy
+                IdleStep(rotation: -14.0, offset: CGSize(width: -8, height: -2), scaleX: 1.06, scaleY: 0.96, duration: 0.08),
+                IdleStep(rotation: 14.0, offset: CGSize(width: 8, height: -2), scaleX: 1.06, scaleY: 0.96, duration: 0.08),
+                IdleStep(rotation: -10.0, offset: CGSize(width: -6, height: 0), scaleX: 1.04, scaleY: 0.98, duration: 0.08),
+                IdleStep(rotation: 10.0, offset: CGSize(width: 6, height: 0), scaleX: 1.04, scaleY: 0.98, duration: 0.08),
+                // Flourish
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: -10), scaleX: 0.96, scaleY: 1.08, duration: 0.14),
+                IdleStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.16),
+            ]
+        case .nod:
+            steps = [
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: 3), scaleX: 1.02, scaleY: 0.98, duration: 0.1),
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: -2), scaleX: 0.99, scaleY: 1.02, duration: 0.1),
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: 2), scaleX: 1.01, scaleY: 0.99, duration: 0.1),
+                IdleStep(rotation: 0.0, offset: CGSize(width: 0, height: -1), scaleX: 1.0, scaleY: 1.01, duration: 0.1),
+            ]
+        case .shake:
+            steps = [
+                IdleStep(rotation: -6.0, offset: CGSize(width: -4, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.08),
+                IdleStep(rotation: 6.0, offset: CGSize(width: 4, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.08),
+                IdleStep(rotation: -5.0, offset: CGSize(width: -3, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.08),
+                IdleStep(rotation: 5.0, offset: CGSize(width: 3, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.08),
+                IdleStep(rotation: -2.0, offset: CGSize(width: -1, height: 0), scaleX: 1.0, scaleY: 1.0, duration: 0.08),
+                IdleStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.1),
+            ]
+        case .bow:
+            useFollowThrough = false
+            steps = [
+                IdleStep(rotation: 12.0, offset: CGSize(width: 0, height: 6), scaleX: 1.0, scaleY: 0.92, duration: 0.2),
+                IdleStep(rotation: 12.0, offset: CGSize(width: 0, height: 6), scaleX: 1.0, scaleY: 0.92, duration: 0.5),
+                IdleStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.2),
             ]
         case .none:
             steps = []

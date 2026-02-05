@@ -8,17 +8,20 @@ struct ClawDaddyState: Codable {
     var state: String
     var lastResponse: String
     var isGreeting: Bool
+    var isReunion: Bool
 
     enum CodingKeys: String, CodingKey {
         case state
         case lastResponse = "last_response"
         case isGreeting = "is_greeting"
+        case isReunion = "is_reunion"
     }
 
-    init(state: String, lastResponse: String, isGreeting: Bool = false) {
+    init(state: String, lastResponse: String, isGreeting: Bool = false, isReunion: Bool = false) {
         self.state = state
         self.lastResponse = lastResponse
         self.isGreeting = isGreeting
+        self.isReunion = isReunion
     }
 
     init(from decoder: Decoder) throws {
@@ -26,6 +29,7 @@ struct ClawDaddyState: Codable {
         state = try container.decode(String.self, forKey: .state)
         lastResponse = try container.decode(String.self, forKey: .lastResponse)
         isGreeting = try container.decodeIfPresent(Bool.self, forKey: .isGreeting) ?? false
+        isReunion = try container.decodeIfPresent(Bool.self, forKey: .isReunion) ?? false
     }
 
     static let empty = ClawDaddyState(state: "idle", lastResponse: "")

@@ -56,6 +56,49 @@ ACK_LINES = [
     "Hook, line, and sinker.",
 ]
 
+SHORT_ACK_LINES = [
+    "On it.",
+    "Aye.",
+    "Done deal.",
+    "Aye aye.",
+    "Right away.",
+]
+
+LONG_ACK_LINES = [
+    "That's a tall order — let me reef the sails.",
+    "Lot of ground to cover. Setting course.",
+    "Big voyage ahead. Charting the route.",
+    "Heavy cargo, cap'n. Loading it up.",
+    "Long haul — all hands on deck.",
+]
+
+REUNION_ACK_LINES = [
+    "There ye are, cap'n!",
+    "Thought ye'd walked the plank!",
+    "The crew was getting restless!",
+    "Cap'n returns! All hands to stations!",
+    "Back on deck! The sea missed ye!",
+]
+
+ERROR_LINES = [
+    "Hit a reef there, cap'n. Give me a moment.",
+    "Lost the signal. The sea's rough today.",
+    "Ran aground on that one. Trying another tack.",
+    "The current pulled us off course. Stand by.",
+    "Something's fouled in the rigging. Hold tight.",
+]
+
+
+def _pick_ack_line(text: str, is_reunion: bool) -> str:
+    if is_reunion:
+        return random.choice(REUNION_ACK_LINES)
+    word_count = len(text.split())
+    if word_count <= 5:
+        return random.choice(SHORT_ACK_LINES)
+    if word_count > 25:
+        return random.choice(LONG_ACK_LINES)
+    return random.choice(ACK_LINES)
+
 
 class ConnectionManager:
     def __init__(self) -> None:
@@ -141,8 +184,14 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 if not text:
                     continue
                 logger.info("Transcript received text_len=%d", len(text))
-                ack_line = random.choice(ACK_LINES)
-                await state_manager.update_clawdaddy(state="speaking", last_response=ack_line, is_greeting=False)
+                is_reunion = openclaw.check_reunion()
+                ack_line = _pick_ack_line(text, is_reunion)
+                await state_manager.update_clawdaddy(
+                    state="speaking",
+                    last_response=ack_line,
+                    is_greeting=False,
+                    is_reunion=is_reunion,
+                )
                 await manager.broadcast_state()
                 await state_manager.update_clawdaddy(state="thinking")
                 await manager.broadcast_state()
@@ -152,7 +201,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                 except Exception as exc:
                     logger.exception("OpenClaw send failed")
                     await state_manager.update_clawdaddy(
-                        state="speaking", last_response=f"Error: {exc}"
+                        state="speaking",
+                        last_response=random.choice(ERROR_LINES),
                     )
                     await manager.broadcast_state()
                     _spawn_background(_set_clawdaddy_idle())
@@ -175,7 +225,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     except Exception as exc:
                         logger.exception("OpenClaw send failed (input_response)")
                         await state_manager.update_clawdaddy(
-                            state="speaking", last_response=f"Error: {exc}"
+                            state="speaking",
+                            last_response=random.choice(ERROR_LINES),
                         )
                         await manager.broadcast_state()
                         _spawn_background(_set_clawdaddy_idle())

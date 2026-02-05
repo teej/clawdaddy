@@ -28,6 +28,17 @@ struct ContentView: View {
     @State private var windowSize = CGSize(width: 320, height: 220)
     @State private var localKeyMonitor: Any?
     @State private var globalKeyMonitor: Any?
+    @State private var proximityMonitor: Any?
+    @State private var lastProximityReaction = Date.distantPast
+    @State private var lastWindowDragReaction = Date.distantPast
+    @State private var sleepTask: Task<Void, Never>?
+    @State private var isSleeping = false
+    @State private var lastInteractionDate = Date()
+    @State private var commandCount = UserDefaults.standard.integer(forKey: "clawdaddy.commandCount")
+    @State private var streakDays = 0
+    @State private var lastColorScheme: ColorScheme?
+    @State private var isTypewriterRevealing = false
+    @Environment(\.colorScheme) private var colorScheme
 
     private let maxBubbles = 4
     private let toastInsets = EdgeInsets(top: 16, leading: 16, bottom: 8, trailing: 44)
@@ -64,10 +75,14 @@ struct ContentView: View {
                 speech.requestAuthorization()
                 socket.connect()
                 startKeyMonitor()
+                updateStreak()
+                resetSleepTimer()
+                lastColorScheme = colorScheme
             }
         }
         .onDisappear {
-            stopKeyMonitor()
+            stopAllMonitors()
+            sleepTask?.cancel()
         }
         .sheet(isPresented: $showingInput) {
             InputSheet(
@@ -79,14 +94,17 @@ struct ContentView: View {
         .onChange(of: speech.isRecording) { newValue in
             if !wasRecording, newValue {
                 lastTranscriptLength = 0
+                resetSleepTimer()
             }
             if wasRecording, !newValue {
+                lastInteractionDate = Date()
                 if lastTranscriptLength > 0 && lastTranscriptLength <= 36 {
                     ackStyle = .big
                 } else {
                     ackStyle = .standard
                 }
                 ackToken += 1
+                trackCommand()
             }
             wasRecording = newValue
         }
@@ -95,7 +113,10 @@ struct ContentView: View {
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty, trimmed != lastClawDaddyMessage else { return }
             upsertClawDaddyBubble(text: trimmed)
-            if socket.appState.clawdaddy.isGreeting {
+            if socket.appState.clawdaddy.isReunion {
+                triggerEmote(.surprised)
+                danceToken += 1
+            } else if socket.appState.clawdaddy.isGreeting {
                 saluteTrigger += 1
                 danceToken += 1
             }
@@ -124,6 +145,24 @@ struct ContentView: View {
                 bottomRowHeight = newValue
             }
         }
+        .onChange(of: colorScheme) { _, newScheme in
+            guard let last = lastColorScheme, last != newScheme else {
+                lastColorScheme = newScheme
+                return
+            }
+            lastColorScheme = newScheme
+            if newScheme == .dark {
+                triggerReaction(.settle)
+            } else {
+                triggerReaction(.perk)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didMoveNotification)) { _ in
+            let now = Date()
+            guard now.timeIntervalSince(lastWindowDragReaction) > 5 else { return }
+            lastWindowDragReaction = now
+            triggerReaction(.alert)
+        }
     }
 
     private var effectiveClawDaddyState: String {
@@ -136,7 +175,11 @@ struct ContentView: View {
         if speech.isSpeaking {
             return "speaking"
         }
-        return socket.appState.clawdaddy.state
+        let socketState = socket.appState.clawdaddy.state
+        if socketState == "idle" && isSleeping {
+            return "sleeping"
+        }
+        return socketState
     }
 
     private struct BubbleItem: Identifiable {
@@ -171,7 +214,7 @@ struct ContentView: View {
 
     private func stopPushToTalk() {
         if speech.isRecording {
-            speech.stopRecording(after: 0.25)
+            speech.stopRecording(after: 0.3)
         }
     }
 
@@ -184,9 +227,23 @@ struct ContentView: View {
         globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged]) { event in
             handleModifierEvent(event)
         }
+
+        proximityMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { _ in
+            guard let window = NSApp.windows.first(where: { $0.level == .floating }) else { return }
+            let cursor = NSEvent.mouseLocation
+            let frame = window.frame
+            let expanded = frame.insetBy(dx: -100, dy: -100)
+            guard expanded.contains(cursor), !frame.contains(cursor) else { return }
+            DispatchQueue.main.async {
+                let now = Date()
+                guard now.timeIntervalSince(lastProximityReaction) > 10 else { return }
+                lastProximityReaction = now
+                triggerReaction(.perk)
+            }
+        }
     }
 
-    private func stopKeyMonitor() {
+    private func stopAllMonitors() {
         if let monitor = localKeyMonitor {
             NSEvent.removeMonitor(monitor)
             localKeyMonitor = nil
@@ -194,6 +251,10 @@ struct ContentView: View {
         if let monitor = globalKeyMonitor {
             NSEvent.removeMonitor(monitor)
             globalKeyMonitor = nil
+        }
+        if let monitor = proximityMonitor {
+            NSEvent.removeMonitor(monitor)
+            proximityMonitor = nil
         }
     }
 
@@ -250,7 +311,7 @@ struct ContentView: View {
             commandTokens = Array(tokens.dropFirst())
         } else if tokens.count >= 2, tokens[0] == "do", tokens[1] == "a" {
             commandTokens = Array(tokens.dropFirst(2))
-        } else if tokens.first == "wink" || tokens.first == "tilt" || tokens.first == "surprised" || tokens.first == "surprise" || tokens.first == "salute" || tokens.first == "backflip" || tokens.first == "flip" || tokens.first == "plank" || tokens.first == "walk" {
+        } else if tokens.first == "wink" || tokens.first == "tilt" || tokens.first == "surprised" || tokens.first == "surprise" || tokens.first == "salute" || tokens.first == "backflip" || tokens.first == "flip" || tokens.first == "plank" || tokens.first == "walk" || tokens.first == "play" || tokens.first == "dead" || tokens.first == "spin" || tokens.first == "crab" || tokens.first == "rave" || tokens.first == "dance" || tokens.first == "nod" || tokens.first == "shake" || tokens.first == "bow" {
             commandTokens = tokens
         } else {
             return false
@@ -281,6 +342,34 @@ struct ContentView: View {
             triggerEmote(.plank)
             return true
         }
+        if command.contains("play dead") || command.contains("dead") {
+            triggerEmote(.playDead)
+            return true
+        }
+        if command.contains("spin") {
+            triggerEmote(.spin)
+            return true
+        }
+        if command.contains("crab") || command.contains("rave") {
+            triggerEmote(.crabRave)
+            return true
+        }
+        if command.contains("dance") {
+            danceToken += 1
+            return true
+        }
+        if command.contains("nod") {
+            triggerEmote(.nod)
+            return true
+        }
+        if command.contains("shake") {
+            triggerEmote(.shake)
+            return true
+        }
+        if command.contains("bow") {
+            triggerEmote(.bow)
+            return true
+        }
 
         return false
     }
@@ -294,7 +383,10 @@ struct ContentView: View {
                         SpeechBubbleView(
                             text: bubble.text,
                             isInteractive: bubble.isInteractive,
-                            typewriter: !bubble.isInteractive && bubble.agentId == nil
+                            typewriter: !bubble.isInteractive && bubble.agentId == nil,
+                            onRevealChange: (!bubble.isInteractive && bubble.agentId == nil) ? { revealing in
+                                isTypewriterRevealing = revealing
+                            } : nil
                         ) {
                             if bubble.isInteractive {
                                 pendingInputAgentId = bubble.agentId
@@ -330,7 +422,8 @@ struct ContentView: View {
                 saluteTrigger: saluteTrigger,
                 emoteStyle: emoteStyle,
                 emoteTrigger: emoteTrigger,
-                danceTrigger: danceToken
+                danceTrigger: danceToken,
+                isTalking: isTypewriterRevealing
             )
             .debugBorder(showDebugBorders, color: .red)
 
@@ -506,6 +599,84 @@ struct ContentView: View {
                 isInteractive: agent.state == "waiting_for_input",
                 agentId: agent.id
             )
+        }
+    }
+
+    private func resetSleepTimer() {
+        isSleeping = false
+        sleepTask?.cancel()
+        sleepTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000_000) // 5 minutes
+            await MainActor.run { isSleeping = true }
+        }
+    }
+
+    private func updateStreak() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let key = "clawdaddy.lastOpenDate"
+        let streakKey = "clawdaddy.streakDays"
+
+        if let lastDate = UserDefaults.standard.object(forKey: key) as? Date {
+            let lastDay = calendar.startOfDay(for: lastDate)
+            let diff = calendar.dateComponents([.day], from: lastDay, to: today).day ?? 0
+            if diff == 1 {
+                streakDays = UserDefaults.standard.integer(forKey: streakKey) + 1
+            } else if diff == 0 {
+                streakDays = max(1, UserDefaults.standard.integer(forKey: streakKey))
+            } else {
+                streakDays = 1
+            }
+        } else {
+            streakDays = 1
+        }
+        UserDefaults.standard.set(today, forKey: key)
+        UserDefaults.standard.set(streakDays, forKey: streakKey)
+        checkStreak()
+    }
+
+    private func checkStreak() {
+        let milestones: [Int: String] = [
+            3: "Three days at sea, cap'n. Getting our sea legs.",
+            7: "A full week on the water! Ye be a true sailor.",
+            14: "Two weeks! The crew's never been sharper.",
+            30: "A month! The crew salutes ye, cap'n.",
+        ]
+        guard let message = milestones[streakDays] else { return }
+        let achieved = UserDefaults.standard.stringArray(forKey: "clawdaddy.streakMilestones") ?? []
+        let key = String(streakDays)
+        guard !achieved.contains(key) else { return }
+        UserDefaults.standard.set(achieved + [key], forKey: "clawdaddy.streakMilestones")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            appendBubble(text: message, isInteractive: false, agentId: nil)
+            if streakDays >= 30 {
+                saluteTrigger += 1
+                danceToken += 1
+            }
+        }
+    }
+
+    private func trackCommand() {
+        commandCount += 1
+        UserDefaults.standard.set(commandCount, forKey: "clawdaddy.commandCount")
+        let milestones: [Int: (String, EmoteStyle?)] = [
+            10: ("Tenth order, cap'n! The crew remembers every one.", nil),
+            50: ("Fifty orders! This ship runs like clockwork.", nil),
+            100: ("A hundred orders! Ye run a tight ship.", .backflip),
+            500: ("Five hundred! Cap'n of the century.", .spin),
+            1000: ("A THOUSAND. Captain legend.", .backflip),
+        ]
+        guard let (message, emote) = milestones[commandCount] else { return }
+        let achieved = UserDefaults.standard.stringArray(forKey: "clawdaddy.commandMilestones") ?? []
+        let key = String(commandCount)
+        guard !achieved.contains(key) else { return }
+        UserDefaults.standard.set(achieved + [key], forKey: "clawdaddy.commandMilestones")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            appendBubble(text: message, isInteractive: false, agentId: nil)
+            if let emote {
+                triggerEmote(emote)
+            }
+            danceToken += 1
         }
     }
 

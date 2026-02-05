@@ -92,6 +92,12 @@ class OpenClawClient:
             os.getenv("OPENCLAW_SUBAGENT_CLEANUP_DELAY", "8")
         )
         self._background_tasks: set[asyncio.Task] = set()
+        self._last_chat_time: Optional[float] = None
+        self._reunion_threshold = float(os.getenv("OPENCLAW_REUNION_THRESHOLD", "1800"))
+        self._thinking_flavor_task: Optional[asyncio.Task] = None
+        self._observation_task: Optional[asyncio.Task] = None
+        self._session_chats = 0
+        self._session_agents_completed = 0
 
     def _connected_message(self) -> str:
         generic = [
@@ -137,6 +143,41 @@ class OpenClawClient:
             ]
         return random.choice(time_pool + generic)
 
+    _THINKING_FLAVOR = [
+        "Consulting the charts...",
+        "Checking the rigging...",
+        "Gathering the crew...",
+        "Scouting the horizon...",
+        "Charting a course...",
+        "Diving deep...",
+        "Reading the currents...",
+        "Weighing anchor on that one...",
+    ]
+
+    _OBSERVATION_POOL_IDLE = [
+        "Calm seas today.",
+        "Quiet on deck.",
+        "The horizon looks clear.",
+        "Good weather for sailing.",
+    ]
+
+    _OBSERVATION_POOL_BUSY = [
+        "The crew's been busy.",
+        "Good haul today, cap'n.",
+        "Productive waters today.",
+        "Running a tight ship, cap'n.",
+    ]
+
+    def check_reunion(self) -> bool:
+        now = time.time()
+        is_reunion = (
+            self._last_chat_time is not None
+            and (now - self._last_chat_time) > self._reunion_threshold
+        )
+        self._last_chat_time = now
+        self._session_chats += 1
+        return is_reunion
+
     async def start(self) -> None:
         if not self._ws_url:
             raise RuntimeError(
@@ -177,6 +218,10 @@ class OpenClawClient:
         if self._idle_task:
             self._idle_task.cancel()
             self._idle_task = None
+        self._stop_thinking_flavor()
+        if self._observation_task:
+            self._observation_task.cancel()
+            self._observation_task = None
         if self._ws:
             self._logger.info("OpenClaw socket closing")
             await self._ws.close()
@@ -194,6 +239,7 @@ class OpenClawClient:
         self._current_response = ""
         await self._state_manager.update_clawdaddy(state="thinking")
         await self._broadcast_state()
+        self._start_thinking_flavor()
         payload: dict[str, Any] = {"idempotencyKey": str(uuid.uuid4())}
         payload["sessionKey"] = self._session_key
         payload["message"] = text
@@ -240,6 +286,7 @@ class OpenClawClient:
         )
         await self._broadcast_state()
         self._schedule_idle()
+        self._start_observation_loop()
 
     async def _ensure_connected(self) -> None:
         if not self._ws or _ws_is_closed(self._ws):
@@ -307,6 +354,7 @@ class OpenClawClient:
             await self._handle_agent_event(payload)
 
     async def _handle_chat_event(self, payload: Any) -> None:
+        self._stop_thinking_flavor()
         role = _extract_role(payload)
         if role == "user":
             return
@@ -370,6 +418,8 @@ class OpenClawClient:
         await self._broadcast_state()
 
         if state in {"done", "error"}:
+            if state == "done":
+                self._session_agents_completed += 1
             self._spawn_background(self._cleanup_sub_agent(str(agent_id)))
 
     def _spawn_background(self, coro) -> None:
@@ -423,6 +473,56 @@ class OpenClawClient:
             else:
                 params["auth"] = {"token": self._api_key}
         return params
+
+    def _start_thinking_flavor(self) -> None:
+        self._stop_thinking_flavor()
+        self._thinking_flavor_task = asyncio.create_task(self._thinking_flavor_loop())
+
+    def _stop_thinking_flavor(self) -> None:
+        if self._thinking_flavor_task:
+            self._thinking_flavor_task.cancel()
+            self._thinking_flavor_task = None
+
+    async def _thinking_flavor_loop(self) -> None:
+        try:
+            await asyncio.sleep(5.0)
+            while True:
+                snapshot = await self._state_manager.snapshot()
+                if snapshot.clawdaddy.state != "thinking":
+                    return
+                msg = random.choice(self._THINKING_FLAVOR)
+                await self._state_manager.update_clawdaddy(
+                    state="thinking", last_response=msg, is_greeting=False,
+                )
+                await self._broadcast_state()
+                await asyncio.sleep(random.uniform(5.0, 8.0))
+        except asyncio.CancelledError:
+            return
+
+    def _start_observation_loop(self) -> None:
+        if self._observation_task is None:
+            self._observation_task = asyncio.create_task(self._observation_loop())
+
+    async def _observation_loop(self) -> None:
+        try:
+            while True:
+                await asyncio.sleep(random.uniform(7200, 9000))
+                snapshot = await self._state_manager.snapshot()
+                if snapshot.clawdaddy.state != "idle":
+                    continue
+                pool = (
+                    self._OBSERVATION_POOL_BUSY
+                    if self._session_agents_completed >= 3
+                    else self._OBSERVATION_POOL_IDLE
+                )
+                msg = random.choice(pool)
+                await self._state_manager.update_clawdaddy(
+                    state="speaking", last_response=msg, is_greeting=False,
+                )
+                await self._broadcast_state()
+                self._schedule_idle()
+        except asyncio.CancelledError:
+            return
 
     def _schedule_idle(self) -> None:
         if self._idle_task:

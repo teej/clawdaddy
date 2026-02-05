@@ -3,6 +3,7 @@ import SwiftUI
 struct TypewriterText: View {
     let text: String
     let charsPerSecond: Double
+    var onRevealChange: ((Bool) -> Void)?
 
     @State private var visibleCount = 0
     @State private var revealTask: Task<Void, Never>?
@@ -14,6 +15,7 @@ struct TypewriterText: View {
             }
             .onDisappear {
                 revealTask?.cancel()
+                onRevealChange?(false)
             }
             .onChange(of: text) {
                 if text.count > visibleCount {
@@ -26,12 +28,14 @@ struct TypewriterText: View {
         revealTask?.cancel()
         let target = text.count
         guard visibleCount < target else { return }
+        onRevealChange?(true)
         let interval = UInt64(1_000_000_000 / charsPerSecond)
         revealTask = Task { @MainActor in
             while visibleCount < target, !Task.isCancelled {
                 visibleCount += 1
                 try? await Task.sleep(nanoseconds: interval)
             }
+            onRevealChange?(false)
         }
     }
 }
@@ -40,6 +44,7 @@ struct SpeechBubbleView: View {
     let text: String
     let isInteractive: Bool
     var typewriter: Bool = false
+    var onRevealChange: ((Bool) -> Void)?
     var onTap: () -> Void
 
     var body: some View {
@@ -75,7 +80,7 @@ struct SpeechBubbleView: View {
     @ViewBuilder
     private var textContent: some View {
         if typewriter {
-            TypewriterText(text: text, charsPerSecond: 60)
+            TypewriterText(text: text, charsPerSecond: 60, onRevealChange: onRevealChange)
         } else {
             Text(text)
         }
