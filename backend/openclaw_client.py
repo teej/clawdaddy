@@ -210,6 +210,8 @@ class OpenClawClient:
             is_greeting=is_greeting,
         )
         await self._broadcast_state()
+        if is_greeting:
+            self._schedule_idle()
 
     async def close(self) -> None:
         if self._recv_task:
