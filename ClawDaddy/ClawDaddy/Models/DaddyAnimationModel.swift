@@ -74,6 +74,8 @@ final class DaddyAnimationModel {
     private(set) var idleScaleX: CGFloat = 1.0
     private(set) var idleScaleY: CGFloat = 1.0
     private(set) var breathPhase = false
+    private(set) var swayPhase = false
+    private(set) var settlePhase = false
     private(set) var listeningPhase = false
     private(set) var thinkingPhase = false
     private(set) var waitingPhase = false
@@ -104,6 +106,8 @@ final class DaddyAnimationModel {
         guard !didStart else { return }
         didStart = true
         startBreathing()
+        startSway()
+        startSettle()
         startIdleLoop()
         if animState == .thinking {
             startThinkingMotion()
@@ -239,6 +243,31 @@ final class DaddyAnimationModel {
         return breathPhase ? amplitude : -amplitude
     }
 
+    var swayOffset: CGSize {
+        let amp: CGFloat = animState == .sleeping ? 3.0 : 6.0
+        return swayPhase ? CGSize(width: amp, height: 0) : CGSize(width: -amp, height: 0)
+    }
+
+    var swayRotation: Double {
+        let amp = animState == .sleeping ? 1.75 : 3.5
+        return swayPhase ? amp : -amp
+    }
+
+    var settleOffset: CGSize {
+        let amp: CGFloat = animState == .sleeping ? 2.5 : 5.0
+        return settlePhase ? CGSize(width: 0, height: amp) : CGSize(width: 0, height: -amp)
+    }
+
+    var settleScaleX: CGFloat {
+        let amp: CGFloat = animState == .sleeping ? 0.01 : 0.02
+        return settlePhase ? (1.0 + amp) : (1.0 - amp)
+    }
+
+    var settleScaleY: CGFloat {
+        let amp: CGFloat = animState == .sleeping ? 0.01 : 0.02
+        return settlePhase ? (1.0 - amp) : (1.0 + amp)
+    }
+
     var listeningScale: CGFloat {
         animState == .listening ? 1.03 : 1.0
     }
@@ -299,22 +328,22 @@ final class DaddyAnimationModel {
     }
 
     var finalScaleX: CGFloat {
-        breathScale * idleScaleX * listeningScale * thinkingScale * speakingScaleX
+        breathScale * settleScaleX * idleScaleX * listeningScale * thinkingScale * speakingScaleX
     }
 
     var finalScaleY: CGFloat {
-        breathScale * idleScaleY * listeningScale * thinkingScale * speakingScaleY
+        breathScale * settleScaleY * idleScaleY * listeningScale * thinkingScale * speakingScaleY
     }
 
     var finalRotation: Angle {
-        Angle(degrees: idleRotation + listeningRotation + thinkingRotation + breathRotation + speakingRotation + waitingRotation)
+        Angle(degrees: idleRotation + listeningRotation + thinkingRotation + breathRotation + swayRotation + speakingRotation + waitingRotation)
     }
 
     var finalOffset: CGSize {
         let listenOffset = CGSize(width: 0, height: animState == .listening ? -2 : 0)
         return CGSize(
-            width: idleOffset.width + listenOffset.width + listeningOffset.width + thinkingOffset.width + speakingOffset.width + waitingOffset.width,
-            height: idleOffset.height + listenOffset.height + listeningOffset.height + thinkingOffset.height + speakingOffset.height + waitingOffset.height
+            width: idleOffset.width + listenOffset.width + listeningOffset.width + thinkingOffset.width + speakingOffset.width + waitingOffset.width + swayOffset.width + settleOffset.width,
+            height: idleOffset.height + listenOffset.height + listeningOffset.height + thinkingOffset.height + speakingOffset.height + waitingOffset.height + swayOffset.height + settleOffset.height
         )
     }
 
@@ -341,6 +370,32 @@ final class DaddyAnimationModel {
         breathPhase = false
         withAnimation(.easeInOut(duration: 6.0).repeatForever(autoreverses: true)) {
             breathPhase = true
+        }
+    }
+
+    // MARK: - Tidal Sway (Baseline Idle)
+
+    private func startSway() {
+        swayPhase = false
+        setTask("sway") {
+            while !Task.isCancelled {
+                withAnimation(.easeInOut(duration: 4.3)) {
+                    self.swayPhase.toggle()
+                }
+                try? await Task.sleep(nanoseconds: 4_200_000_000)
+            }
+        }
+    }
+
+    private func startSettle() {
+        settlePhase = false
+        setTask("settle") {
+            while !Task.isCancelled {
+                withAnimation(.easeInOut(duration: 7.1)) {
+                    self.settlePhase.toggle()
+                }
+                try? await Task.sleep(nanoseconds: 7_000_000_000)
+            }
         }
     }
 
