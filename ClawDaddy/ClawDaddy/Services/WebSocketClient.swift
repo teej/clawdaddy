@@ -120,7 +120,12 @@ final class WebSocketClient: ObservableObject {
         task = nil
         isConnecting = false
         sessionKey = nil
-        pending.removeAll()
+        failAllPendingRequests(with: "Disconnected")
+        pendingMessages.removeAll()
+        for (_, workItem) in cleanupWorkItems {
+            workItem.cancel()
+        }
+        cleanupWorkItems.removeAll()
         challengeWaitWorkItem?.cancel()
         challengeWaitWorkItem = nil
         didSendConnectRequest = false
@@ -358,11 +363,14 @@ final class WebSocketClient: ObservableObject {
         for item in queued {
             currentResponse = ""
             updateClawDaddy(state: "thinking")
-            let params: [String: Any] = [
+            var params: [String: Any] = [
                 "idempotencyKey": UUID().uuidString,
                 "sessionKey": sessionKey,
                 "message": item.text,
             ]
+            if let subAgentId = item.subAgentId, !subAgentId.isEmpty {
+                params["agentId"] = subAgentId
+            }
             sendRequest(method: chatMethod, params: params) { ok, _, error in
                 if !ok {
                     logger.warning("Chat send failed: \(error ?? "unknown")")
@@ -468,12 +476,14 @@ final class WebSocketClient: ObservableObject {
         )
 
         cleanupWorkItems[agentID]?.cancel()
+        cleanupWorkItems.removeValue(forKey: agentID)
         if normalizedState == "done" || normalizedState == "error" {
             if normalizedState == "done" {
                 sessionAgentsCompleted += 1
             }
             let workItem = DispatchWorkItem { [weak self] in
                 self?.removeSubAgent(agentID)
+                self?.cleanupWorkItems.removeValue(forKey: agentID)
             }
             cleanupWorkItems[agentID] = workItem
             DispatchQueue.main.asyncAfter(deadline: .now() + subAgentCleanupDelay, execute: workItem)
@@ -1462,6 +1472,14 @@ final class WebSocketClient: ObservableObject {
         return "set(len=\(value.count))"
     }
 
+    private func failAllPendingRequests(with error: String) {
+        let callbacks = pending.values
+        pending.removeAll()
+        for callback in callbacks {
+            callback(false, nil, error)
+        }
+    }
+
     private func scheduleReconnect() {
         stopPingTimer()
         idleWorkItem?.cancel()
@@ -1472,6 +1490,7 @@ final class WebSocketClient: ObservableObject {
         challengeWaitWorkItem?.cancel()
         challengeWaitWorkItem = nil
         challengePayload = nil
+        failAllPendingRequests(with: "Connection interrupted")
         if reconnectWorkItem != nil {
             return
         }
