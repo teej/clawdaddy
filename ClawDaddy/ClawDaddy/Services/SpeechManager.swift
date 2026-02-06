@@ -27,11 +27,6 @@ final class SpeechManager: NSObject, ObservableObject {
         synthesizer.delegate = self
     }
 
-    func requestAuthorization() {
-        SFSpeechRecognizer.requestAuthorization { _ in }
-        AVCaptureDevice.requestAccess(for: .audio) { _ in }
-    }
-
     func startRecording(onResult: @escaping (String) -> Void) {
         guard !isRecording else { return }
 

@@ -11,6 +11,7 @@ struct ContentView: View {
     @StateObject private var socket = WebSocketClient()
     @StateObject private var speech = SpeechManager()
     @StateObject private var settings = SettingsStore.shared
+    @StateObject private var permissions = PermissionManager()
 
     @State private var inputText = ""
     @State private var showingInput = false
@@ -74,16 +75,18 @@ struct ContentView: View {
             } else if isSubAgentSelfTest {
                 seedSubAgentsForSelfTest()
             } else if !isUITest {
-                speech.requestAuthorization()
+                permissions.startMonitoring()
                 socket.connect()
                 startKeyMonitor()
                 handleMilestone(milestones.updateStreak(), delay: 3.0)
                 resetSleepTimer()
                 lastColorScheme = colorScheme
+                startPermissionOnboarding()
             }
         }
         .onDisappear {
             stopAllMonitors()
+            permissions.stopMonitoring()
             sleepTask?.cancel()
         }
         .sheet(isPresented: $showingInput) {
@@ -171,6 +174,55 @@ struct ContentView: View {
         .onChange(of: isTypewriterRevealing) { newValue in
             daddyModel.send(.talkingChanged(newValue))
         }
+        .onChange(of: permissions.micStatus) { oldValue, newValue in
+            guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
+            if oldValue == .granted, newValue != .granted {
+                showPermissionBubble(
+                    action: .openMicSettings,
+                    line: PermissionLines.randomLine(for: .mic)
+                )
+                daddyModel.send(.reaction(.alert))
+            }
+            if oldValue != .granted, newValue == .granted {
+                onboardSpeechPermission()
+            }
+        }
+        .onChange(of: permissions.speechStatus) { oldValue, newValue in
+            guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
+            if oldValue == .granted, newValue != .granted {
+                showPermissionBubble(
+                    action: .openSpeechSettings,
+                    line: PermissionLines.randomLine(for: .speech)
+                )
+                daddyModel.send(.reaction(.alert))
+            }
+            if oldValue != .granted, newValue == .granted, permissions.micStatus == .granted {
+                showPermissionGrantedReaction()
+            }
+        }
+        .onChange(of: permissions.accessibilityGranted) { oldValue, newValue in
+            guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
+            if oldValue, !newValue, permissions.needsAccessibility(for: settings.pttKey) {
+                showPermissionBubble(
+                    action: .openAccessibilitySettings,
+                    line: PermissionLines.randomLine(for: .accessibility)
+                )
+                daddyModel.send(.reaction(.alert))
+            }
+            if !oldValue, newValue {
+                appendBubble(text: PermissionLines.randomLine(for: .granted), isInteractive: false, agentId: nil)
+                daddyModel.send(.salute)
+            }
+        }
+        .onChange(of: settings.pttKey) { _, newKey in
+            guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
+            if permissions.needsAccessibility(for: newKey) {
+                showPermissionBubble(
+                    action: .openAccessibilitySettings,
+                    line: PermissionLines.randomLine(for: .accessibility)
+                )
+            }
+        }
     }
 
     private var effectiveClawDaddyState: DaddyAnimState {
@@ -197,11 +249,20 @@ struct ContentView: View {
         }
     }
 
+    private enum PermissionAction: Equatable {
+        case requestMic
+        case requestSpeech
+        case openMicSettings
+        case openSpeechSettings
+        case openAccessibilitySettings
+    }
+
     private struct BubbleItem: Identifiable {
         let id: String
         let text: String
         let isInteractive: Bool
         let agentId: String?
+        var permissionAction: PermissionAction? = nil
     }
 
     private func submitInput() {
@@ -215,6 +276,22 @@ struct ContentView: View {
 
     private func startPushToTalk() {
         if speech.isRecording {
+            return
+        }
+        if permissions.micStatus != .granted {
+            showPermissionBubble(
+                action: permissions.micStatus == .notDetermined ? .requestMic : .openMicSettings,
+                line: PermissionLines.randomLine(for: .mic)
+            )
+            daddyModel.send(.reaction(.alert))
+            return
+        }
+        if permissions.speechStatus != .granted {
+            showPermissionBubble(
+                action: permissions.speechStatus == .notDetermined ? .requestSpeech : .openSpeechSettings,
+                line: PermissionLines.randomLine(for: .speech)
+            )
+            daddyModel.send(.reaction(.alert))
             return
         }
         speech.startRecording { transcript in
@@ -303,7 +380,7 @@ struct ContentView: View {
     }
 
     private var hasInteractiveBubble: Bool {
-        bubbles.contains { $0.isInteractive }
+        bubbles.contains { $0.isInteractive || $0.permissionAction != nil }
     }
 
     private func syncAnimState() {
@@ -413,10 +490,15 @@ struct ContentView: View {
                         SpeechBubbleView(
                             text: bubble.text,
                             isInteractive: bubble.isInteractive,
-                            typewriter: !bubble.isInteractive && bubble.agentId == nil,
-                            onRevealChange: (!bubble.isInteractive && bubble.agentId == nil) ? { revealing in
+                            typewriter: bubble.permissionAction == nil && !bubble.isInteractive && bubble.agentId == nil,
+                            onRevealChange: (bubble.permissionAction == nil && !bubble.isInteractive && bubble.agentId == nil) ? { revealing in
                                 isTypewriterRevealing = revealing
-                            } : nil
+                            } : nil,
+                            actionLabel: permissionActionLabel(for: bubble.permissionAction),
+                            onAction: bubble.permissionAction != nil ? {
+                                handlePermissionAction(bubble.permissionAction!, bubbleId: bubble.id)
+                            } : nil,
+                            isPermission: bubble.permissionAction != nil
                         ) {
                             if bubble.isInteractive {
                                 pendingInputAgentId = bubble.agentId
@@ -649,6 +731,122 @@ struct ContentView: View {
             if reward.dance {
                 daddyModel.send(.dance)
             }
+        }
+    }
+
+    // MARK: - Permission Onboarding
+
+    private func startPermissionOnboarding() {
+        Task {
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s for window to appear
+            onboardMicPermission()
+        }
+    }
+
+    private func onboardMicPermission() {
+        switch permissions.micStatus {
+        case .granted:
+            onboardSpeechPermission()
+        case .notDetermined:
+            showPermissionBubble(action: .requestMic, line: PermissionLines.randomLine(for: .mic))
+        case .denied, .restricted:
+            showPermissionBubble(action: .openMicSettings, line: PermissionLines.randomLine(for: .mic))
+        }
+    }
+
+    private func onboardSpeechPermission() {
+        switch permissions.speechStatus {
+        case .granted:
+            if permissions.micStatus == .granted {
+                showPermissionGrantedReaction()
+            }
+        case .notDetermined:
+            showPermissionBubble(action: .requestSpeech, line: PermissionLines.randomLine(for: .speech))
+        case .denied, .restricted:
+            showPermissionBubble(action: .openSpeechSettings, line: PermissionLines.randomLine(for: .speech))
+        }
+    }
+
+    private func showPermissionGrantedReaction() {
+        appendBubble(text: PermissionLines.randomLine(for: .granted), isInteractive: false, agentId: nil)
+        daddyModel.send(.salute)
+        daddyModel.send(.dance)
+    }
+
+    private func showPermissionBubble(action: PermissionAction, line: String) {
+        // Dedup: don't stack duplicate permission bubbles
+        guard !bubbles.contains(where: { $0.permissionAction == action }) else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            let item = BubbleItem(
+                id: UUID().uuidString,
+                text: line,
+                isInteractive: false,
+                agentId: nil,
+                permissionAction: action
+            )
+            bubbles.append(item)
+            if bubbles.count > maxBubbles {
+                let overflow = bubbles.count - maxBubbles
+                for _ in 0..<overflow {
+                    if let index = bubbles.firstIndex(where: { !$0.isInteractive && $0.permissionAction == nil }) {
+                        bubbles.remove(at: index)
+                    } else if let index = bubbles.firstIndex(where: { !$0.isInteractive }) {
+                        if bubbles[index].id == currentClawDaddyBubbleId {
+                            currentClawDaddyBubbleId = nil
+                        }
+                        bubbles.remove(at: index)
+                    } else {
+                        bubbles.removeFirst()
+                    }
+                }
+            }
+        }
+    }
+
+    private func handlePermissionAction(_ action: PermissionAction, bubbleId: String) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            bubbles.removeAll { $0.id == bubbleId }
+        }
+        switch action {
+        case .requestMic:
+            Task {
+                await permissions.requestMicPermission()
+                if permissions.micStatus == .granted {
+                    onboardSpeechPermission()
+                } else {
+                    showPermissionBubble(action: .openMicSettings, line: PermissionLines.randomLine(for: .mic))
+                    daddyModel.send(.reaction(.alert))
+                }
+            }
+        case .requestSpeech:
+            Task {
+                await permissions.requestSpeechPermission()
+                if permissions.speechStatus == .granted {
+                    if permissions.micStatus == .granted {
+                        showPermissionGrantedReaction()
+                    }
+                } else {
+                    showPermissionBubble(action: .openSpeechSettings, line: PermissionLines.randomLine(for: .speech))
+                    daddyModel.send(.reaction(.alert))
+                }
+            }
+        case .openMicSettings:
+            permissions.openMicSettings()
+        case .openSpeechSettings:
+            permissions.openSpeechSettings()
+        case .openAccessibilitySettings:
+            permissions.openAccessibilitySettings()
+        }
+    }
+
+    private func permissionActionLabel(for action: PermissionAction?) -> String? {
+        switch action {
+        case .requestMic: return "Grant Mic Access"
+        case .requestSpeech: return "Grant Speech Access"
+        case .openMicSettings: return "Open Mic Settings"
+        case .openSpeechSettings: return "Open Speech Settings"
+        case .openAccessibilitySettings: return "Open Accessibility"
+        case nil: return nil
         }
     }
 

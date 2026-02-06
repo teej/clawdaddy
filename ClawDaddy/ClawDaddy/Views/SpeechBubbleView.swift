@@ -56,10 +56,19 @@ struct SpeechBubbleView: View {
     let isInteractive: Bool
     var typewriter: Bool = false
     var onRevealChange: ((Bool) -> Void)?
+    var actionLabel: String? = nil
+    var onAction: (() -> Void)? = nil
+    var isPermission: Bool = false
     var onTap: () -> Void
 
     @State private var isHovered = false
     @State private var showCopied = false
+
+    private var strokeColor: Color {
+        if isPermission { return Color.orange.opacity(0.7) }
+        if isInteractive { return Color.blue.opacity(0.7) }
+        return Color.clear
+    }
 
     var body: some View {
         let base = bubbleShape
@@ -69,49 +78,65 @@ struct SpeechBubbleView: View {
                     .stroke(Color.gray.opacity(0.4), lineWidth: 0.5)
             )
 
-        let interactiveStroke = bubbleShape
-            .stroke(isInteractive ? Color.blue.opacity(0.7) : Color.clear, lineWidth: 1)
+        let accentStroke = bubbleShape
+            .stroke(strokeColor, lineWidth: 1)
 
-        return textContent
-            .font(.system(size: 12, weight: .medium))
-            .foregroundColor(.black)
-            .multilineTextAlignment(.leading)
-            .lineLimit(nil)
-            .fixedSize(horizontal: false, vertical: true)
-            .layoutPriority(1)
-            .padding(12)
-            .background(base)
-            .overlay(interactiveStroke)
-            .overlay {
-                if showCopied {
-                    bubbleShape
-                        .fill(Color.black.opacity(0.6))
-                        .overlay(
-                            Text("Copied!")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(.white)
-                        )
-                        .transition(.opacity)
+        return VStack(alignment: .leading, spacing: 6) {
+            textContent
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.black)
+                .multilineTextAlignment(.leading)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
+
+            if let label = actionLabel, let action = onAction {
+                Button(action: action) {
+                    Text(label)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange))
                 }
+                .buttonStyle(.plain)
             }
-            .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 2)
-            .frame(maxWidth: 280, alignment: .leading)
-            .animation(.easeInOut(duration: 0.15), value: isHovered)
-            .onHover { hovering in
-                isHovered = hovering
-                if hovering {
-                    NSCursor.pointingHand.push()
-                } else {
-                    NSCursor.pop()
-                }
+        }
+        .padding(12)
+        .background(base)
+        .overlay(accentStroke)
+        .overlay {
+            if showCopied {
+                bubbleShape
+                    .fill(Color.black.opacity(0.6))
+                    .overlay(
+                        Text("Copied!")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.white)
+                    )
+                    .transition(.opacity)
             }
-            .onTapGesture {
-                if isInteractive {
-                    onTap()
-                } else {
-                    copyToClipboard()
-                }
+        }
+        .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 2)
+        .frame(maxWidth: 280, alignment: .leading)
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
             }
+        }
+        .onTapGesture {
+            if isPermission {
+                // No clipboard copy for permission bubbles
+            } else if isInteractive {
+                onTap()
+            } else {
+                copyToClipboard()
+            }
+        }
     }
 
     @ViewBuilder
