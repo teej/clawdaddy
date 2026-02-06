@@ -4,6 +4,7 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var socket = WebSocketClient()
     @StateObject private var speech = SpeechManager()
+    @StateObject private var settings = SettingsStore.shared
 
     @State private var inputText = ""
     @State private var showingInput = false
@@ -42,7 +43,6 @@ struct ContentView: View {
     private let bubbleSpacing: CGFloat = 10
     private let showDebugBorders = false
 
-    private let pushToTalkKeyCode: UInt16 = 59 // Left Control
     private var isLayoutSelfTest: Bool {
         ProcessInfo.processInfo.environment["CLAWDADDY_LAYOUT_SELFTEST"] == "1"
     }
@@ -225,13 +225,15 @@ struct ContentView: View {
     }
 
     private func startKeyMonitor() {
-        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged]) { event in
-            handleModifierEvent(event)
+        let eventMask: NSEvent.EventTypeMask = [.flagsChanged, .keyDown, .keyUp]
+
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: eventMask) { event in
+            handleKeyEvent(event)
             return event
         }
 
-        globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged]) { event in
-            handleModifierEvent(event)
+        globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: eventMask) { event in
+            handleKeyEvent(event)
         }
 
         proximityMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { _ in
@@ -264,13 +266,23 @@ struct ContentView: View {
         }
     }
 
-    private func handleModifierEvent(_ event: NSEvent) {
-        guard event.keyCode == pushToTalkKeyCode else { return }
+    private func handleKeyEvent(_ event: NSEvent) {
+        let pttKey = settings.pttKey
+        guard event.keyCode == pttKey.keyCode else { return }
 
-        if event.modifierFlags.contains(.control) {
-            startPushToTalk()
+        if pttKey.isModifier {
+            guard event.type == .flagsChanged, let flag = pttKey.nsModifierFlag else { return }
+            if event.modifierFlags.contains(flag) {
+                startPushToTalk()
+            } else {
+                stopPushToTalk()
+            }
         } else {
-            stopPushToTalk()
+            if event.type == .keyDown {
+                startPushToTalk()
+            } else if event.type == .keyUp {
+                stopPushToTalk()
+            }
         }
     }
 
@@ -417,7 +429,9 @@ struct ContentView: View {
 
     private var bottomRow: some View {
         HStack(spacing: 12) {
-            DaddyView(model: daddyModel, size: 126)
+            DaddyView(model: daddyModel, size: 126, onSettingsTap: {
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            })
             .debugBorder(showDebugBorders, color: .red)
 
             if !socket.appState.subAgents.isEmpty {

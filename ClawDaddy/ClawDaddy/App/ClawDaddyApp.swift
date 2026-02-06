@@ -13,5 +13,14 @@ struct ClawDaddyApp: App {
         WindowGroup {
             ContentView()
         }
+
+        Settings {
+            SettingsView(
+                settings: SettingsStore.shared,
+                onDismiss: {
+                    NSApp.keyWindow?.close()
+                }
+            )
+        }
     }
 }

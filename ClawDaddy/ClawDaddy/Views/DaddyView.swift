@@ -3,6 +3,7 @@ import SwiftUI
 struct DaddyView: View {
     let model: DaddyAnimationModel
     let size: CGFloat
+    var onSettingsTap: (() -> Void)?
 
     @State private var lastHoverReaction = Date.distantPast
 
@@ -44,6 +45,9 @@ struct DaddyView: View {
                     Button("Bow") { model.send(.emote(.bow)) }
                 }
                 Divider()
+                Button("Settings...") {
+                    onSettingsTap?()
+                }
                 Button("About ClawDaddy") {
                     // Placeholder — version/flavor text
                 }
