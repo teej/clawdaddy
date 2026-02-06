@@ -35,31 +35,47 @@ enum PermissionLines {
     }
 
     private static let micLines = [
-        "I need yer microphone to hear ya, captain!",
-        "Can't listen without the mic, matey!",
-        "Grant me mic access so I can catch yer orders!",
-        "A lobster without a mic is just a rock on the seabed.",
+        "I need the mic, Captain.",
+        "No mic, no orders. Flip that switch, Captain.",
+        "Grant microphone access so I can hear your command.",
+        "Open the mic hatch and I'm listening.",
+        "Give me mic access and these claws are on duty.",
+        "I hear the surf, not your voice. Mic access, please.",
+        "One quick permission and I'll catch every order.",
+        "Quick check: microphone access required.",
     ]
 
     private static let speechLines = [
-        "Now I need speech recognition to understand ya!",
-        "One more thing — let me understand yer words, cap'n!",
-        "Grant speech access so I can parse yer commands!",
-        "Almost there — I need to decode yer voice!",
+        "Now I need speech recognition.",
+        "One more hatch, Captain: speech access.",
+        "Grant speech access so I can parse your orders.",
+        "Mic is live. Now let me understand your words.",
+        "Give me speech permission and I'll decode every command.",
+        "Almost shipshape. Speech recognition is the last step.",
+        "Let me translate your orders into action, Captain.",
+        "Final switch: speech recognition, then we sail.",
     ]
 
     private static let accessibilityLines = [
-        "I need accessibility access to catch that key, matey!",
-        "That key requires accessibility permissions, cap'n!",
-        "Can't grab that hotkey without accessibility access!",
-        "Grant accessibility so I can hear yer keystrokes!",
+        "I need accessibility access to catch that hotkey, Captain.",
+        "That keybind is behind accessibility permissions.",
+        "I can't grab the key without that access.",
+        "Grant accessibility and I'll catch each key press.",
+        "Open accessibility and these claws can watch the keyboard.",
+        "Hotkey duty needs accessibility permission.",
+        "Give me accessibility access and I'll take keyboard watch.",
+        "Accessibility granted means the keybind is mine.",
     ]
 
     private static let grantedLines = [
-        "All hands on deck! Ready to serve, cap'n!",
-        "Aye aye! All systems go!",
-        "Anchors aweigh! I'm all ears now!",
-        "Full speed ahead — permissions locked in!",
+        "Aye aye, Captain. Ready to serve.",
+        "Permissions locked in. Claws on deck.",
+        "All green, Captain. Ready for your orders.",
+        "Bridge secured. Standing by.",
+        "We're shipshape and listening, Captain.",
+        "Systems are clear. Let's set a course.",
+        "Anchors up. I'm ready to hear you now.",
+        "Deck is clear and I'm on watch.",
     ]
 }
 

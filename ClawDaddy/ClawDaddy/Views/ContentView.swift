@@ -42,6 +42,8 @@ struct ContentView: View {
     @State private var lastColorScheme: ColorScheme?
     @State private var isTypewriterRevealing = false
     @State private var lastSentAnimState: DaddyAnimState = .idle
+    @State private var lastHeroMomentAt = Date.distantPast
+    @State private var didShowPermissionGranted = false
     @Environment(\.colorScheme) private var colorScheme
 
     private let maxBubbles = 4
@@ -116,8 +118,9 @@ struct ContentView: View {
         .onChange(of: socket.appState.clawdaddy.lastResponse) { newValue in
             guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty, trimmed != lastClawDaddyMessage else { return }
-            upsertClawDaddyBubble(text: trimmed)
+            let rendered = renderClawDaddyMessage(trimmed)
+            guard !trimmed.isEmpty, rendered != lastClawDaddyMessage else { return }
+            upsertClawDaddyBubble(text: rendered)
             if socket.appState.clawdaddy.isReunion {
                 daddyModel.send(.emote(.surprised))
                 daddyModel.send(.dance)
@@ -177,6 +180,7 @@ struct ContentView: View {
         .onChange(of: permissions.micStatus) { oldValue, newValue in
             guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
             if oldValue == .granted, newValue != .granted {
+                didShowPermissionGranted = false
                 showPermissionBubble(
                     action: .openMicSettings,
                     line: PermissionLines.randomLine(for: .mic)
@@ -190,6 +194,7 @@ struct ContentView: View {
         .onChange(of: permissions.speechStatus) { oldValue, newValue in
             guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
             if oldValue == .granted, newValue != .granted {
+                didShowPermissionGranted = false
                 showPermissionBubble(
                     action: .openSpeechSettings,
                     line: PermissionLines.randomLine(for: .speech)
@@ -379,6 +384,12 @@ struct ContentView: View {
         Array(bubbles.suffix(maxBubbles))
     }
 
+    private func renderClawDaddyMessage(_ text: String) -> String {
+        guard settings.showMessageProvenance else { return text }
+        guard let provenance = socket.lastClawDaddyProvenance, !provenance.isEmpty else { return text }
+        return "[\(provenance)] \(text)"
+    }
+
     private var hasInteractiveBubble: Bool {
         bubbles.contains { $0.isInteractive || $0.permissionAction != nil }
     }
@@ -386,9 +397,27 @@ struct ContentView: View {
     private func syncAnimState() {
         let state = effectiveClawDaddyState
         guard state != lastSentAnimState else { return }
+        let previousState = lastSentAnimState
         pttLog.warning("[PTT] T+\(pttMs())ms syncAnimState: \(String(describing: lastSentAnimState)) → \(String(describing: state))")
         lastSentAnimState = state
         daddyModel.send(.stateChanged(state))
+        playHeroMomentIfNeeded(from: previousState, to: state)
+    }
+
+    private func playHeroMomentIfNeeded(from oldState: DaddyAnimState, to newState: DaddyAnimState) {
+        let now = Date()
+        guard now.timeIntervalSince(lastHeroMomentAt) >= 0.9 else { return }
+
+        switch (oldState, newState) {
+        case (.listening, .thinking):
+            lastHeroMomentAt = now
+            daddyModel.send(.reaction(.perk))
+        case (.thinking, .speaking):
+            lastHeroMomentAt = now
+            daddyModel.send(.emote(.nod))
+        default:
+            break
+        }
     }
 
     private func setThinkingHold(duration: TimeInterval) {
@@ -768,6 +797,8 @@ struct ContentView: View {
     }
 
     private func showPermissionGrantedReaction() {
+        guard !didShowPermissionGranted else { return }
+        didShowPermissionGranted = true
         appendBubble(text: PermissionLines.randomLine(for: .granted), isInteractive: false, agentId: nil)
         daddyModel.send(.salute)
         daddyModel.send(.dance)

@@ -9,9 +9,13 @@ final class SettingsStore: ObservableObject {
     @Published var useFoundationModels: Bool {
         didSet { saveFoundationModelsToggle() }
     }
+    @Published var showMessageProvenance: Bool {
+        didSet { saveShowMessageProvenanceToggle() }
+    }
 
     private let key = "clawdaddy.pttKey"
     private let foundationModelsKey = "clawdaddy.useFoundationModels"
+    private let showMessageProvenanceKey = "clawdaddy.showMessageProvenance"
 
     private init() {
         if let data = UserDefaults.standard.data(forKey: key),
@@ -25,6 +29,11 @@ final class SettingsStore: ObservableObject {
         } else {
             useFoundationModels = UserDefaults.standard.bool(forKey: foundationModelsKey)
         }
+        if UserDefaults.standard.object(forKey: showMessageProvenanceKey) == nil {
+            showMessageProvenance = true
+        } else {
+            showMessageProvenance = UserDefaults.standard.bool(forKey: showMessageProvenanceKey)
+        }
     }
 
     private func save() {
@@ -35,9 +44,14 @@ final class SettingsStore: ObservableObject {
     func resetToDefault() {
         pttKey = .defaultKey
         useFoundationModels = true
+        showMessageProvenance = true
     }
 
     private func saveFoundationModelsToggle() {
         UserDefaults.standard.set(useFoundationModels, forKey: foundationModelsKey)
+    }
+
+    private func saveShowMessageProvenanceToggle() {
+        UserDefaults.standard.set(showMessageProvenance, forKey: showMessageProvenanceKey)
     }
 }
