@@ -73,9 +73,9 @@ final class DaddyAnimationModel {
     private(set) var idleOffset: CGSize = .zero
     private(set) var idleScaleX: CGFloat = 1.0
     private(set) var idleScaleY: CGFloat = 1.0
-    private(set) var breathPhase = false
-    private(set) var swayPhase = false
-    private(set) var settlePhase = false
+    private(set) var breathAmount: Double = 0
+    private(set) var swayAmount: Double = 0
+    private(set) var settleAmount: Double = 0
     private(set) var listeningPhase = false
     private(set) var thinkingPhase = false
     private(set) var waitingPhase = false
@@ -105,9 +105,7 @@ final class DaddyAnimationModel {
     func start() {
         guard !didStart else { return }
         didStart = true
-        startBreathing()
-        startSway()
-        startSettle()
+        startIdleMotion()
         startIdleLoop()
         if animState == .thinking {
             startThinkingMotion()
@@ -234,38 +232,38 @@ final class DaddyAnimationModel {
 
     var breathScale: CGFloat {
         let amplitude: CGFloat = animState == .sleeping ? 0.004 : 0.008
-        return breathPhase ? (1.0 + amplitude) : (1.0 - amplitude)
+        return 1.0 + amplitude * breathAmount
     }
 
     var breathRotation: Double {
         guard animState == .idle || animState == .sleeping else { return 0 }
         let amplitude = animState == .sleeping ? 0.15 : 0.25
-        return breathPhase ? amplitude : -amplitude
+        return amplitude * breathAmount
     }
 
     var swayOffset: CGSize {
         let amp: CGFloat = animState == .sleeping ? 3.0 : 6.0
-        return swayPhase ? CGSize(width: amp, height: 0) : CGSize(width: -amp, height: 0)
+        return CGSize(width: amp * swayAmount, height: 0)
     }
 
     var swayRotation: Double {
         let amp = animState == .sleeping ? 1.75 : 3.5
-        return swayPhase ? amp : -amp
+        return amp * swayAmount
     }
 
     var settleOffset: CGSize {
         let amp: CGFloat = animState == .sleeping ? 2.5 : 5.0
-        return settlePhase ? CGSize(width: 0, height: amp) : CGSize(width: 0, height: -amp)
+        return CGSize(width: 0, height: amp * settleAmount)
     }
 
     var settleScaleX: CGFloat {
         let amp: CGFloat = animState == .sleeping ? 0.01 : 0.02
-        return settlePhase ? (1.0 + amp) : (1.0 - amp)
+        return 1.0 + amp * settleAmount
     }
 
     var settleScaleY: CGFloat {
         let amp: CGFloat = animState == .sleeping ? 0.01 : 0.02
-        return settlePhase ? (1.0 - amp) : (1.0 + amp)
+        return 1.0 - amp * settleAmount
     }
 
     var listeningScale: CGFloat {
@@ -364,37 +362,17 @@ final class DaddyAnimationModel {
         return 0
     }
 
-    // MARK: - Breathing
+    // MARK: - Idle Motion (breathing + sway + settle driven by sine waves at ~24fps)
 
-    private func startBreathing() {
-        breathPhase = false
-        withAnimation(.easeInOut(duration: 6.0).repeatForever(autoreverses: true)) {
-            breathPhase = true
-        }
-    }
-
-    // MARK: - Tidal Sway (Baseline Idle)
-
-    private func startSway() {
-        swayPhase = false
-        setTask("sway") {
+    private func startIdleMotion() {
+        setTask("idleMotion") {
+            let start = CFAbsoluteTimeGetCurrent()
             while !Task.isCancelled {
-                withAnimation(.easeInOut(duration: 4.3)) {
-                    self.swayPhase.toggle()
-                }
-                try? await Task.sleep(nanoseconds: 4_200_000_000)
-            }
-        }
-    }
-
-    private func startSettle() {
-        settlePhase = false
-        setTask("settle") {
-            while !Task.isCancelled {
-                withAnimation(.easeInOut(duration: 7.1)) {
-                    self.settlePhase.toggle()
-                }
-                try? await Task.sleep(nanoseconds: 7_000_000_000)
+                let t = CFAbsoluteTimeGetCurrent() - start
+                self.breathAmount = sin(t * .pi / 6.0)   // 12s full cycle
+                self.swayAmount = sin(t * .pi / 4.3)     // 8.6s full cycle
+                self.settleAmount = sin(t * .pi / 7.1)   // 14.2s full cycle
+                try? await Task.sleep(nanoseconds: 41_666_667) // ~24fps
             }
         }
     }

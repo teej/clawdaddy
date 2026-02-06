@@ -236,19 +236,18 @@ struct ContentView: View {
             handleKeyEvent(event)
         }
 
-        proximityMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { _ in
+        let proximityTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [self] _ in
             guard let window = NSApp.windows.first(where: { $0.level == .floating }) else { return }
             let cursor = NSEvent.mouseLocation
             let frame = window.frame
             let expanded = frame.insetBy(dx: -100, dy: -100)
             guard expanded.contains(cursor), !frame.contains(cursor) else { return }
-            DispatchQueue.main.async {
-                let now = Date()
-                guard now.timeIntervalSince(lastProximityReaction) > 10 else { return }
-                lastProximityReaction = now
-                daddyModel.send(.reaction(.perk))
-            }
+            let now = Date()
+            guard now.timeIntervalSince(lastProximityReaction) > 10 else { return }
+            lastProximityReaction = now
+            daddyModel.send(.reaction(.perk))
         }
+        proximityMonitor = proximityTimer
     }
 
     private func stopAllMonitors() {
@@ -260,10 +259,10 @@ struct ContentView: View {
             NSEvent.removeMonitor(monitor)
             globalKeyMonitor = nil
         }
-        if let monitor = proximityMonitor {
-            NSEvent.removeMonitor(monitor)
-            proximityMonitor = nil
+        if let timer = proximityMonitor as? Timer {
+            timer.invalidate()
         }
+        proximityMonitor = nil
     }
 
     private func handleKeyEvent(_ event: NSEvent) {
