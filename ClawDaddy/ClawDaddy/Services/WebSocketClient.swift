@@ -942,16 +942,6 @@ final class WebSocketClient: ObservableObject {
         ]
 
         if wsURL == nil || apiKey == nil {
-            let cli = discoverViaCLIWithDiagnostics()
-            notes.append("cli=\(cli.details)")
-            if let cliDiscovery = cli.discovery {
-                if wsURL == nil { wsURL = cliDiscovery.wsURL }
-                if apiKey == nil { apiKey = cliDiscovery.apiKey }
-                if authMode == nil { authMode = cliDiscovery.authMode }
-                source = "cli"
-            }
-        }
-        if wsURL == nil || apiKey == nil {
             let file = discoverViaFileWithDiagnostics()
             notes.append("file=\(file.details)")
             if let fileDiscovery = file.discovery {
@@ -959,6 +949,16 @@ final class WebSocketClient: ObservableObject {
                 if apiKey == nil { apiKey = fileDiscovery.apiKey }
                 if authMode == nil { authMode = fileDiscovery.authMode }
                 source = "file"
+            }
+        }
+        if wsURL == nil || apiKey == nil {
+            let cli = discoverViaCLIWithDiagnostics()
+            notes.append("cli=\(cli.details)")
+            if let cliDiscovery = cli.discovery {
+                if wsURL == nil { wsURL = cliDiscovery.wsURL }
+                if apiKey == nil { apiKey = cliDiscovery.apiKey }
+                if authMode == nil { authMode = cliDiscovery.authMode }
+                source = "cli"
             }
         }
         let result = OpenClawDiscovery(
@@ -1193,4 +1193,26 @@ final class WebSocketClient: ObservableObject {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: reconnectWorkItem!)
     }
+
+#if DEBUG
+    func refreshConfigForTesting() {
+        refreshConfig()
+    }
+
+    var discoveredWSURLForTesting: URL? {
+        wsURL
+    }
+
+    var hasAPIKeyForTesting: Bool {
+        !(apiKey?.isEmpty ?? true)
+    }
+
+    var discoveryDiagnosticsForTesting: String {
+        configDiagnostics
+    }
+
+    var identityDiagnosticsForTesting: String {
+        identityDiagnostics
+    }
+#endif
 }

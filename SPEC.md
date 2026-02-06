@@ -2,6 +2,9 @@
 
 ## Project Spec v0.1
 
+Note (February 2026): This spec captures the original SwiftUI + Python backend architecture.
+The shipping path is now Swift-only with direct OpenClaw gateway connectivity.
+
 ---
 
 ## What This Is

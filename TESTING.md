@@ -1,86 +1,50 @@
 # ClawDaddy Testing Runbook
 
-## 1. Backend Unit Tests (pytest)
+## 1. Swift Checks
 
 ```bash
-uv run --extra test pytest backend/tests/ -v
+just check
 ```
 
-All tests should pass. Covers:
-- `test_state.py` — StateManager sub-agent lifecycle (add, update, remove, reset, snapshot isolation)
-- `test_openclaw_helpers.py` — `_normalize_agent_state` synonym mapping
+This runs:
+- Swift parse check
+- macOS unit tests (`ClawDaddyTests`)
 
-## 2. Debug Injection (curl)
-
-Start the backend with debug mode enabled:
+## 2. macOS Unit Tests
 
 ```bash
-DEBUG_INJECT=1 uv run uvicorn backend.main:app --reload
+just test-macos
 ```
 
-Create a working sub-agent:
+## 3. UI Tests (interactive environment)
 
 ```bash
-curl -X POST http://localhost:8000/debug/sub-agent \
-  -H 'Content-Type: application/json' \
-  -d '{"id": "test-1", "state": "working", "task_description": "Scouting the reef"}'
+just test-macos-ui
 ```
 
-Transition to waiting_for_input:
+## 4. Manual Gateway Smoke Test
+
+Ensure OpenClaw has been onboarded on the host:
 
 ```bash
-curl -X POST http://localhost:8000/debug/sub-agent \
-  -H 'Content-Type: application/json' \
-  -d '{"id": "test-1", "state": "waiting_for_input", "question": "Which reef?"}'
+openclaw onboard
 ```
 
-Transition to done (auto-cleanup after 8s):
+Launch the app:
 
 ```bash
-curl -X POST http://localhost:8000/debug/sub-agent \
-  -H 'Content-Type: application/json' \
-  -d '{"id": "test-1", "state": "done", "result": "Found the treasure!"}'
+open /tmp/crawdaddy-derived/Build/Products/Debug/ClawDaddy.app
 ```
-
-Manual removal:
-
-```bash
-curl -X POST http://localhost:8000/debug/sub-agent/test-1/remove
-```
-
-Verify endpoints are hidden without `DEBUG_INJECT=1`:
-
-```bash
-# Without DEBUG_INJECT, should return 404
-uv run uvicorn backend.main:app --reload &
-curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:8000/debug/sub-agent \
-  -H 'Content-Type: application/json' -d '{"id": "x"}'
-# Expected: 404
-```
-
-## 3. Sub-Agent Selftest (SwiftUI)
-
-Launch the app with the selftest environment variable:
-
-```bash
-CLAWDADDY_SUBAGENT_SELFTEST=1 open ClawDaddy/build/Build/Products/Debug/ClawDaddy.app
-```
-
-Or set the env var in Xcode scheme > Run > Arguments > Environment Variables.
 
 Expected:
-- 4 lobster emojis in the bottom row
-- 3 speech bubbles: question ("What bait should I use?"), result ("Found 3 treasure chests!"), error ("Lost the anchor!")
-- No bubble for the working agent (working agents don't produce messages)
+- Console logs include `OpenClaw discovery summary` and `OpenClaw identity summary`
+- PTT can send a transcript and receive a response
+- Avatar transitions speaking -> thinking -> idle
 
-## 4. UI Tests (xcodebuild)
+## 5. Sub-Agent Selftest (SwiftUI)
 
 ```bash
-xcodebuild test \
-  -project ClawDaddy/ClawDaddy.xcodeproj \
-  -scheme ClawDaddy \
-  -destination 'platform=macOS' \
-  -only-testing:ClawDaddyUITests
+CLAWDADDY_SUBAGENT_SELFTEST=1 open /tmp/crawdaddy-derived/Build/Products/Debug/ClawDaddy.app
 ```
 
 Key tests:

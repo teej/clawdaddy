@@ -57,7 +57,7 @@ Port these backend responsibilities into Swift:
 
 ## Test Strategy
 
-1. `just check` for Swift parse + strict backend tests during transition.
+1. `just check` for Swift parse + macOS unit tests.
 2. `just test-macos` for macOS unit tests.
 3. Manual smoke test with real OpenClaw:
    - start app
@@ -70,12 +70,13 @@ Port these backend responsibilities into Swift:
 
 1. Phase 1: Implement direct gateway client in Swift and keep UI API unchanged.
 2. Phase 2: Validate parity with real gateway sessions.
-3. Phase 3: Remove Python backend codepaths and docs.
-4. Phase 4: Update release packaging to app-only.
+3. Phase 3: Remove Python backend codepaths and docs. (in progress)
+4. Phase 4: Update release packaging to app-only. (in progress)
 
 ## Deletion Checklist (when parity is confirmed)
 
-1. Remove `backend/` runtime usage from release flow.
-2. Update `README.md` to app-only startup instructions.
-3. Remove backend launch requirements from `TESTING.md`.
-4. Remove Python backend recipes from `justfile` if no longer needed.
+1. Remove `backend/` runtime usage from release flow. (done)
+2. Update `README.md` to app-only startup instructions. (done)
+3. Remove backend launch requirements from `TESTING.md`. (done)
+4. Remove Python backend recipes from `justfile` if no longer needed. (done)
+5. Remove obsolete backend source tree and Python lockfile from repo. (pending)
