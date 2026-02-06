@@ -1,5 +1,11 @@
 import AppKit
+import os
 import SwiftUI
+
+private let pttLog = Logger(subsystem: "com.teej.ClawDaddy", category: "PTT")
+/// Shared mutable reference time for PTT debug tracing
+var pttT0: CFAbsoluteTime = 0
+func pttMs() -> Int { Int((CFAbsoluteTimeGetCurrent() - pttT0) * 1000) }
 
 struct ContentView: View {
     @StateObject private var socket = WebSocketClient()
@@ -88,6 +94,9 @@ struct ContentView: View {
             )
         }
         .onChange(of: speech.isRecording) { newValue in
+            if newValue {
+                pttLog.warning("[PTT] T+\(pttMs())ms onChange(isRecording=true)")
+            }
             if !wasRecording, newValue {
                 lastTranscriptLength = 0
                 resetSleepTimer()
@@ -272,12 +281,16 @@ struct ContentView: View {
         if pttKey.isModifier {
             guard event.type == .flagsChanged, let flag = pttKey.nsModifierFlag else { return }
             if event.modifierFlags.contains(flag) {
+                pttT0 = CFAbsoluteTimeGetCurrent()
+                pttLog.warning("[PTT] T+0ms key event")
                 startPushToTalk()
             } else {
                 stopPushToTalk()
             }
         } else {
             if event.type == .keyDown {
+                pttT0 = CFAbsoluteTimeGetCurrent()
+                pttLog.warning("[PTT] T+0ms key event")
                 startPushToTalk()
             } else if event.type == .keyUp {
                 stopPushToTalk()
@@ -296,6 +309,7 @@ struct ContentView: View {
     private func syncAnimState() {
         let state = effectiveClawDaddyState
         guard state != lastSentAnimState else { return }
+        pttLog.warning("[PTT] T+\(pttMs())ms syncAnimState: \(String(describing: lastSentAnimState)) → \(String(describing: state))")
         lastSentAnimState = state
         daddyModel.send(.stateChanged(state))
     }

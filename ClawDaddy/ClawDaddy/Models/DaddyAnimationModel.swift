@@ -1,4 +1,8 @@
+import os
 import SwiftUI
+
+private let pttLog = Logger(subsystem: "com.teej.ClawDaddy", category: "PTT")
+// pttT0 / pttMs() defined in ContentView.swift
 
 // MARK: - Enums & Types
 
@@ -165,6 +169,7 @@ final class DaddyAnimationModel {
     // MARK: - State Change Handler
 
     private func handleStateChange(_ newState: DaddyAnimState) {
+        pttLog.warning("[PTT] T+\(pttMs())ms handleStateChange → \(String(describing: newState))")
         let wasSleeping = animState == .sleeping
         animState = newState
 

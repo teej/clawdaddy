@@ -1,6 +1,10 @@
 import AVFoundation
+import os
 import Speech
 import SwiftUI
+
+private let pttLog = Logger(subsystem: "com.teej.ClawDaddy", category: "PTT")
+// pttT0 / pttMs() defined in ContentView.swift
 
 final class SpeechManager: NSObject, ObservableObject {
     @Published var isRecording = false
@@ -29,14 +33,24 @@ final class SpeechManager: NSObject, ObservableObject {
     }
 
     func startRecording(onResult: @escaping (String) -> Void) {
-        guard !audioEngine.isRunning else { return }
+        guard !isRecording else { return }
 
         stopWorkItem?.cancel()
         stopWorkItem = nil
         onTranscript = onResult
         lastTranscript = ""
         isStopping = false
+        pttLog.warning("[PTT] T+\(pttMs())ms isRecording = true")
+        isRecording = true  // Immediate UI feedback — audio setup happens off main thread
 
+        DispatchQueue.global(qos: .userInitiated).async {
+            pttLog.warning("[PTT] T+\(pttMs())ms beginAudioCapture starting")
+            self.beginAudioCapture()
+            pttLog.warning("[PTT] T+\(pttMs())ms beginAudioCapture done")
+        }
+    }
+
+    private func beginAudioCapture() {
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
         recognitionRequest?.shouldReportPartialResults = true
 
@@ -50,11 +64,10 @@ final class SpeechManager: NSObject, ObservableObject {
         audioEngine.prepare()
         do {
             try audioEngine.start()
-            DispatchQueue.main.async {
-                self.isRecording = true
-            }
         } catch {
-            stopRecording()
+            DispatchQueue.main.async {
+                self.finishRecording(sendTranscript: false)
+            }
             return
         }
 
