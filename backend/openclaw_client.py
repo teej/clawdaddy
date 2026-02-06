@@ -17,7 +17,7 @@ import hashlib
 
 import websockets
 from cryptography.hazmat.primitives import serialization
-from websockets import WebSocketClientProtocol
+from websockets.asyncio.client import ClientConnection
 from websockets.exceptions import ConnectionClosed
 
 from backend.state import StateManager, SubAgentState
@@ -82,7 +82,7 @@ class OpenClawClient:
             )
         self._lock = asyncio.Lock()
         self._pending: dict[str, asyncio.Future] = {}
-        self._ws: Optional[WebSocketClientProtocol] = None
+        self._ws: Optional[ClientConnection] = None
         self._recv_task: Optional[asyncio.Task] = None
         self._idle_task: Optional[asyncio.Task] = None
         self._session_key: Optional[str] = None

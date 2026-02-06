@@ -1,6 +1,14 @@
 # Build the Xcode project
 build:
-    xcodebuild -project ClawDaddy/ClawDaddy.xcodeproj -scheme ClawDaddy -configuration Debug build
+    xcodebuild -project ClawDaddy/ClawDaddy.xcodeproj -scheme ClawDaddy -configuration Debug -derivedDataPath /tmp/crawdaddy-derived build
+
+# Run macOS unit tests
+test-macos:
+    xcodebuild test -project ClawDaddy/ClawDaddy.xcodeproj -scheme ClawDaddy -destination 'platform=macOS' -derivedDataPath /tmp/crawdaddy-derived -only-testing:ClawDaddyTests
+
+# Run macOS UI tests (requires interactive permissions)
+test-macos-ui:
+    xcodebuild test -project ClawDaddy/ClawDaddy.xcodeproj -scheme ClawDaddy -destination 'platform=macOS' -derivedDataPath /tmp/crawdaddy-derived -only-testing:ClawDaddyUITests
 
 # Check all Swift files parse correctly
 check-swift:
@@ -8,7 +16,11 @@ check-swift:
 
 # Run backend Python tests
 test-backend:
-    uv run pytest backend/tests/
+    uv run --extra test pytest backend/tests/ -q
+
+# Run backend tests with deprecations treated as errors
+test-backend-strict:
+    uv run --extra test pytest backend/tests/ -q -W error::DeprecationWarning
 
 # Run both checks
-check: check-swift test-backend
+check: check-swift test-backend-strict
