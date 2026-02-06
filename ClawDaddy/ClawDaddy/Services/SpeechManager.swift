@@ -40,25 +40,27 @@ final class SpeechManager: NSObject, ObservableObject {
         onTranscript = onResult
         lastTranscript = ""
         isStopping = false
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        recognitionRequest = request
+
         pttLog.warning("[PTT] T+\(pttMs())ms isRecording = true")
         isRecording = true  // Immediate UI feedback — audio setup happens off main thread
 
         DispatchQueue.global(qos: .userInitiated).async {
             pttLog.warning("[PTT] T+\(pttMs())ms beginAudioCapture starting")
-            self.beginAudioCapture()
+            self.beginAudioCapture(request: request)
             pttLog.warning("[PTT] T+\(pttMs())ms beginAudioCapture done")
         }
     }
 
-    private func beginAudioCapture() {
-        recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        recognitionRequest?.shouldReportPartialResults = true
-
+    private func beginAudioCapture(request: SFSpeechAudioBufferRecognitionRequest) {
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
+            request.append(buffer)
         }
 
         audioEngine.prepare()
@@ -71,10 +73,12 @@ final class SpeechManager: NSObject, ObservableObject {
             return
         }
 
-        recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest!) { [weak self] result, error in
+        recognitionTask = speechRecognizer?.recognitionTask(with: request) { [weak self] result, error in
             guard let self else { return }
             if let result {
-                self.lastTranscript = result.bestTranscription.formattedString
+                DispatchQueue.main.async {
+                    self.lastTranscript = result.bestTranscription.formattedString
+                }
                 if result.isFinal {
                     DispatchQueue.main.async {
                         self.finishRecording(sendTranscript: true)

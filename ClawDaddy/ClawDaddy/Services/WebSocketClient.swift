@@ -21,6 +21,7 @@ private struct DeviceIdentity {
     var privateKeySeed: Data
 }
 
+@MainActor
 final class WebSocketClient: ObservableObject {
     @Published var appState = AppState.empty
 
@@ -193,14 +194,17 @@ final class WebSocketClient: ObservableObject {
     }
 
     private func receive() {
-        task?.receive { [weak self] result in
+        let ws = task
+        ws?.receive { [weak self] result in
             guard let self else { return }
-            switch result {
-            case .failure:
-                self.scheduleReconnect()
-            case .success(let message):
-                self.handle(message)
-                self.receive()
+            Task { @MainActor in
+                switch result {
+                case .failure:
+                    self.scheduleReconnect()
+                case .success(let message):
+                    self.handle(message)
+                    self.receive()
+                }
             }
         }
     }
@@ -237,10 +241,8 @@ final class WebSocketClient: ObservableObject {
 
     private func startPingTimer() {
         stopPingTimer()
-        DispatchQueue.main.async {
-            self.pingTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
-                self?.sendPing()
-            }
+        pingTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+            self?.sendPing()
         }
     }
 
@@ -250,9 +252,12 @@ final class WebSocketClient: ObservableObject {
     }
 
     private func sendPing() {
-        task?.sendPing { [weak self] error in
+        let ws = task
+        ws?.sendPing { [weak self] error in
             if error != nil {
-                self?.scheduleReconnect()
+                Task { @MainActor in
+                    self?.scheduleReconnect()
+                }
             }
         }
     }
@@ -337,8 +342,10 @@ final class WebSocketClient: ObservableObject {
         }
         task?.send(.string(payload)) { [weak self] error in
             if error != nil {
-                self?.pending.removeValue(forKey: requestID)
-                self?.scheduleReconnect()
+                Task { @MainActor in
+                    self?.pending.removeValue(forKey: requestID)
+                    self?.scheduleReconnect()
+                }
             }
         }
     }
@@ -351,13 +358,16 @@ final class WebSocketClient: ObservableObject {
         for item in queued {
             currentResponse = ""
             updateClawDaddy(state: "thinking")
-            startThinkingFlavor()
             let params: [String: Any] = [
                 "idempotencyKey": UUID().uuidString,
                 "sessionKey": sessionKey,
                 "message": item.text,
             ]
-            sendRequest(method: chatMethod, params: params)
+            sendRequest(method: chatMethod, params: params) { ok, _, error in
+                if !ok {
+                    logger.warning("Chat send failed: \(error ?? "unknown")")
+                }
+            }
         }
     }
 
@@ -480,17 +490,15 @@ final class WebSocketClient: ObservableObject {
         isGreeting: Bool? = nil,
         isReunion: Bool? = nil
     ) {
-        DispatchQueue.main.async {
-            self.appState.clawdaddy.state = state
-            if let lastResponse {
-                self.appState.clawdaddy.lastResponse = lastResponse
-            }
-            if let isGreeting {
-                self.appState.clawdaddy.isGreeting = isGreeting
-            }
-            if let isReunion {
-                self.appState.clawdaddy.isReunion = isReunion
-            }
+        appState.clawdaddy.state = state
+        if let lastResponse {
+            appState.clawdaddy.lastResponse = lastResponse
+        }
+        if let isGreeting {
+            appState.clawdaddy.isGreeting = isGreeting
+        }
+        if let isReunion {
+            appState.clawdaddy.isReunion = isReunion
         }
     }
 
@@ -502,38 +510,34 @@ final class WebSocketClient: ObservableObject {
         result: String?,
         error: String?
     ) {
-        DispatchQueue.main.async {
-            var stateModel = self.appState
-            if let idx = stateModel.subAgents.firstIndex(where: { $0.id == id }) {
-                stateModel.subAgents[idx].state = state
-                stateModel.subAgents[idx].taskDescription = taskDescription
-                stateModel.subAgents[idx].question = question
-                stateModel.subAgents[idx].result = result
-                stateModel.subAgents[idx].error = error
-                stateModel.subAgents[idx].updatedAt = ISO8601DateFormatter().string(from: Date())
-            } else {
-                stateModel.subAgents.append(
-                    SubAgentState(
-                        id: id,
-                        state: state,
-                        taskDescription: taskDescription,
-                        question: question,
-                        result: result,
-                        error: error,
-                        updatedAt: ISO8601DateFormatter().string(from: Date())
-                    )
+        var stateModel = appState
+        if let idx = stateModel.subAgents.firstIndex(where: { $0.id == id }) {
+            stateModel.subAgents[idx].state = state
+            stateModel.subAgents[idx].taskDescription = taskDescription
+            stateModel.subAgents[idx].question = question
+            stateModel.subAgents[idx].result = result
+            stateModel.subAgents[idx].error = error
+            stateModel.subAgents[idx].updatedAt = ISO8601DateFormatter().string(from: Date())
+        } else {
+            stateModel.subAgents.append(
+                SubAgentState(
+                    id: id,
+                    state: state,
+                    taskDescription: taskDescription,
+                    question: question,
+                    result: result,
+                    error: error,
+                    updatedAt: ISO8601DateFormatter().string(from: Date())
                 )
-            }
-            self.appState = stateModel
+            )
         }
+        appState = stateModel
     }
 
     private func removeSubAgent(_ id: String) {
-        DispatchQueue.main.async {
-            var stateModel = self.appState
-            stateModel.subAgents.removeAll(where: { $0.id == id })
-            self.appState = stateModel
-        }
+        var stateModel = appState
+        stateModel.subAgents.removeAll(where: { $0.id == id })
+        appState = stateModel
     }
 
     private func scheduleIdle() {
@@ -694,9 +698,7 @@ final class WebSocketClient: ObservableObject {
             let latencyMS = Int(Date().timeIntervalSince(start) * 1000)
             if let generated = result {
                 logger.info("Expressive status prefetch success latency_ms=\(latencyMS)")
-                DispatchQueue.main.async {
-                    self.expressiveStatusCache = generated
-                }
+                self.expressiveStatusCache = generated
             } else {
                 logger.info("Expressive status prefetch failed latency_ms=\(latencyMS)")
             }
@@ -719,18 +721,16 @@ final class WebSocketClient: ObservableObject {
                 message = self.fallbackExpressiveSlot(kind: kind, userText: userText)
                 logger.info("Expressive \(kind) fallback latency_ms=\(latencyMS)")
             }
-            DispatchQueue.main.async {
-                guard self.activeExpressiveTurnID == turnID else {
-                    logger.info("Expressive \(kind) dropped reason=stale_turn latency_ms=\(latencyMS)")
-                    return
-                }
-                guard self.appState.clawdaddy.state == "thinking" else {
-                    logger.info("Expressive \(kind) dropped reason=state_not_thinking latency_ms=\(latencyMS)")
-                    return
-                }
-                self.expressiveShownAt = Date()
-                self.updateClawDaddy(state: "thinking", lastResponse: message)
+            guard self.activeExpressiveTurnID == turnID else {
+                logger.info("Expressive \(kind) dropped reason=stale_turn latency_ms=\(latencyMS)")
+                return
             }
+            guard self.appState.clawdaddy.state == "thinking" else {
+                logger.info("Expressive \(kind) dropped reason=state_not_thinking latency_ms=\(latencyMS)")
+                return
+            }
+            self.expressiveShownAt = Date()
+            self.updateClawDaddy(state: "thinking", lastResponse: message)
         }
     }
 
@@ -1478,6 +1478,7 @@ final class WebSocketClient: ObservableObject {
         isConnecting = false
         sessionKey = nil
         didSendConnectRequest = false
+        task?.cancel(with: .goingAway, reason: nil)
         task = nil
         reconnectWorkItem = DispatchWorkItem { [weak self] in
             self?.reconnectWorkItem = nil

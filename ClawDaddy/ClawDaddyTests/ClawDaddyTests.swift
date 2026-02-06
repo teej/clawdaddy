@@ -10,9 +10,10 @@ import Testing
 import Foundation
 import Darwin
 
+@MainActor
 struct ClawDaddyTests {
 
-    @Test func configDiscoveryFromStateDirLoadsGatewayAndIdentity() throws {
+    @Test @MainActor func configDiscoveryFromStateDirLoadsGatewayAndIdentity() throws {
         let fm = FileManager.default
         let base = fm.temporaryDirectory.appendingPathComponent("clawdaddy-tests-\(UUID().uuidString)")
         let stateDir = base.appendingPathComponent(".openclaw")
