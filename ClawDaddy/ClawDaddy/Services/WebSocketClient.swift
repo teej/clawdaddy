@@ -62,6 +62,7 @@ final class WebSocketClient: ObservableObject {
     private var activeExpressiveTurnID: String?
     private var expressiveShownAt: Date?
     private var expressiveBufferWorkItem: DispatchWorkItem?
+    private var expressiveStatusCache: String?
 
     private let expressiveTimeoutSeconds = 10.0
     private let minimumExpressiveDisplaySeconds = 2.0
@@ -111,6 +112,7 @@ final class WebSocketClient: ObservableObject {
         expressiveBufferWorkItem?.cancel()
         expressiveBufferWorkItem = nil
         expressiveShownAt = nil
+        expressiveStatusCache = nil
         observationWorkItem?.cancel()
         observationWorkItem = nil
         task?.cancel(with: .goingAway, reason: nil)
@@ -137,6 +139,7 @@ final class WebSocketClient: ObservableObject {
         pendingMessages.append((trimmed, nil))
         connect()
         requestExpressiveSlot(kind: "ack", userText: trimmed, turnID: turnID)
+        prefetchExpressiveStatus(userText: trimmed)
         flushPendingMessages()
     }
 
@@ -161,6 +164,7 @@ final class WebSocketClient: ObservableObject {
         pendingMessages.append((trimmed, subAgentId))
         connect()
         requestExpressiveSlot(kind: "ack", userText: trimmed, turnID: turnID)
+        prefetchExpressiveStatus(userText: trimmed)
         flushPendingMessages()
     }
 
@@ -420,6 +424,7 @@ final class WebSocketClient: ObservableObject {
         activeExpressiveTurnID = nil
         expressiveShownAt = nil
         expressiveBufferWorkItem = nil
+        expressiveStatusCache = nil
         updateClawDaddy(
             state: "speaking",
             lastResponse: currentResponse,
@@ -553,17 +558,14 @@ final class WebSocketClient: ObservableObject {
 
     private func runThinkingFlavorTick() {
         guard appState.clawdaddy.state == "thinking" else { return }
-        let lines = [
-            "Consulting the charts...",
-            "Checking the rigging...",
-            "Gathering the crew...",
-            "Scouting the horizon...",
-            "Charting a course...",
-            "Diving deep...",
-            "Reading the currents...",
-            "Weighing anchor on that one...",
-        ]
-        updateClawDaddy(state: "thinking", lastResponse: lines.randomElement() ?? "Consulting the charts...")
+        let line: String
+        if let cached = expressiveStatusCache {
+            expressiveStatusCache = nil
+            line = cached
+        } else {
+            line = fallbackExpressiveSlot(kind: "status")
+        }
+        updateClawDaddy(state: "thinking", lastResponse: line)
         let delay = Double.random(in: 5.0...8.0)
         let next = DispatchWorkItem { [weak self] in
             self?.runThinkingFlavorTick()
@@ -678,6 +680,26 @@ final class WebSocketClient: ObservableObject {
             "All hands on it.",
             "Claws to work.",
         ].randomElement() ?? "On it, skipper."
+    }
+
+    private func prefetchExpressiveStatus(userText: String) {
+        expressiveStatusCache = nil
+        Task { [weak self] in
+            guard let self else { return }
+            let timeoutBudget = self.expressiveTimeoutBudgetSeconds()
+            logger.info("Expressive status prefetch start")
+            let start = Date()
+            let result = await self.fetchExpressiveSlot(kind: "status", userText: userText, timeoutSeconds: timeoutBudget)
+            let latencyMS = Int(Date().timeIntervalSince(start) * 1000)
+            if let generated = result {
+                logger.info("Expressive status prefetch success latency_ms=\(latencyMS)")
+                DispatchQueue.main.async {
+                    self.expressiveStatusCache = generated
+                }
+            } else {
+                logger.info("Expressive status prefetch failed latency_ms=\(latencyMS)")
+            }
+        }
     }
 
     private func requestExpressiveSlot(kind: String, userText: String, turnID: String) {
@@ -823,6 +845,24 @@ final class WebSocketClient: ObservableObject {
             One sentence, under 90 characters. Do not answer the question directly.
             Return ONLY the quip, nothing else.
             """
+        case "status":
+            let utteranceKind = classifyUtterance(userText)
+            let context: String
+            switch utteranceKind {
+            case .question:
+                context = "The user asked a question. You are looking up the answer."
+            case .command:
+                context = "The user gave a command. You are carrying it out."
+            case .statement:
+                context = "The user made a statement. You are thinking about it."
+            }
+            return """
+            You are a nautical captain. \(context) \
+            Write a short 3-6 word status update about what you're doing, ending with "...". \
+            Make it specific to the user's message. \
+            Examples: "Checking the ship's log...", "Looking into that...", "Running the numbers...", "Pulling up the charts..." \
+            Return ONLY the status line, nothing else.
+            """
         case "bridge":
             return """
             You are a nautical captain about to deliver an answer.
@@ -839,16 +879,31 @@ final class WebSocketClient: ObservableObject {
     private func expressiveSlotMaxLength(for kind: String) -> Int {
         switch kind {
         case "ack": return 25
+        case "status": return 50
         case "quip": return 90
         case "bridge": return 70
         default: return 90
         }
     }
 
+    private func statusPool(for kind: UtteranceKind) -> [String] {
+        switch kind {
+        case .question:
+            return ["Looking into that...", "Checking on that...", "Let me find out...", "Thinking it over...", "Pulling that up..."]
+        case .command:
+            return ["Working on it...", "Getting that done...", "Making it happen...", "On the case...", "Setting that up..."]
+        case .statement:
+            return ["Taking that in...", "Mulling it over...", "Sitting with that...", "Thinking on that..."]
+        }
+    }
+
     private func fallbackExpressiveSlot(kind: String, userText: String = "") -> String {
+        let utteranceKind = classifyUtterance(userText)
         switch kind {
         case "ack":
-            return ackPool(for: classifyUtterance(userText)).randomElement() ?? "Copy."
+            return ackPool(for: utteranceKind).randomElement() ?? "Copy."
+        case "status":
+            return statusPool(for: utteranceKind).randomElement() ?? "Working on it..."
         case "quip":
             return ["Good question, captain.", "Sharp ask.", "Aye, setting course.", "Crew is on it."].randomElement() ?? "Aye."
         case "bridge":
