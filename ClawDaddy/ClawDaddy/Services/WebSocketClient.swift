@@ -416,14 +416,17 @@ final class WebSocketClient: ObservableObject {
                 return
             }
         }
+        expressiveBufferWorkItem?.cancel()
+        expressiveBufferWorkItem = nil
         showChatResponse()
     }
 
     private func showChatResponse() {
+        expressiveBufferWorkItem?.cancel()
+        expressiveBufferWorkItem = nil
         stopThinkingFlavor()
         activeExpressiveTurnID = nil
         expressiveShownAt = nil
-        expressiveBufferWorkItem = nil
         expressiveStatusCache = nil
         updateClawDaddy(
             state: "speaking",
@@ -666,20 +669,18 @@ final class WebSocketClient: ObservableObject {
         if isReunion {
             return ["There ye are, cap'n!", "Back on deck, cap'n!"].randomElement() ?? "There ye are, cap'n!"
         }
-        let wordCount = text.split(whereSeparator: \.isWhitespace).count
-        if wordCount <= 5 {
-            return ["On it.", "Aye.", "Right away."].randomElement() ?? "On it."
+        switch classifyUtterance(text) {
+        case .question:
+            return ["Ah, sharp question.", "Let me consult the charts.", "Hmm, let me see.", "Good eye, cap'n."].randomElement() ?? "Let me see."
+        case .command:
+            let wordCount = text.split(whereSeparator: \.isWhitespace).count
+            if wordCount > 25 {
+                return ["That's a tall order. Setting course.", "Long haul ahead. All hands!"].randomElement() ?? "Setting course."
+            }
+            return ["Aye aye, cap'n!", "On it, skipper.", "Claws to work.", "All hands on it.", "Setting sail."].randomElement() ?? "On it, skipper."
+        case .statement:
+            return ["Noted in the log.", "I hear ye, cap'n.", "Fair enough.", "Aye, understood."].randomElement() ?? "Noted."
         }
-        if wordCount > 25 {
-            return ["That's a tall order. Setting course.", "Long haul ahead. Charting route."].randomElement() ?? "Setting course."
-        }
-        return [
-            "Aye aye, cap'n!",
-            "On it, skipper.",
-            "Charting it now.",
-            "All hands on it.",
-            "Claws to work.",
-        ].randomElement() ?? "On it, skipper."
     }
 
     private func prefetchExpressiveStatus(userText: String) {
@@ -817,11 +818,11 @@ final class WebSocketClient: ObservableObject {
     private func ackPool(for kind: UtteranceKind) -> [String] {
         switch kind {
         case .question:
-            return ["Hmm.", "Good question.", "Let me check.", "Let me see.", "Let me think.", "One sec."]
+            return ["Hmm.", "Good question.", "Sharp eye.", "Let me see.", "Let me think.", "Ah."]
         case .command:
-            return ["Copy.", "On it.", "Got it.", "Roger.", "Aye aye.", "Right away."]
+            return ["Aye.", "On it.", "Aye aye.", "Roger.", "Copy.", "Right away."]
         case .statement:
-            return ["Noted.", "I hear you.", "Got it.", "Ah, right.", "Right."]
+            return ["Noted.", "Heard.", "Aye.", "Fair winds.", "Right."]
         }
     }
 
@@ -831,6 +832,7 @@ final class WebSocketClient: ObservableObject {
             let pool = ackPool(for: classifyUtterance(userText))
             let choices = pool.map { $0.replacingOccurrences(of: ".", with: "") }.joined(separator: ", ")
             return """
+            You are a grizzled sea captain. \
             Pick the best acknowledgment for this message from the list: \(choices). \
             Reply with ONLY your pick and a period. Nothing else.
             """
@@ -857,10 +859,10 @@ final class WebSocketClient: ObservableObject {
                 context = "The user made a statement. You are thinking about it."
             }
             return """
-            You are a nautical captain. \(context) \
+            You are a grizzled sea captain. \(context) \
             Write a short 3-6 word status update about what you're doing, ending with "...". \
-            Make it specific to the user's message. \
-            Examples: "Checking the ship's log...", "Looking into that...", "Running the numbers...", "Pulling up the charts..." \
+            Use nautical language. Make it specific to the user's message. \
+            Examples: "Consulting the charts...", "Sounding the depths...", "Rigging that up...", "Scanning the horizon..." \
             Return ONLY the status line, nothing else.
             """
         case "bridge":
@@ -889,11 +891,11 @@ final class WebSocketClient: ObservableObject {
     private func statusPool(for kind: UtteranceKind) -> [String] {
         switch kind {
         case .question:
-            return ["Looking into that...", "Checking on that...", "Let me find out...", "Thinking it over...", "Pulling that up..."]
+            return ["Consulting the charts...", "Scanning the horizon...", "Checking the log...", "Reading the compass...", "Sounding the depths..."]
         case .command:
-            return ["Working on it...", "Getting that done...", "Making it happen...", "On the case...", "Setting that up..."]
+            return ["Trimming the sails...", "All hands on deck...", "Rigging it up...", "Hauling anchor...", "Setting the course..."]
         case .statement:
-            return ["Taking that in...", "Mulling it over...", "Sitting with that...", "Thinking on that..."]
+            return ["Weighing that...", "Letting that settle...", "Chewing on that...", "Taking the measure..."]
         }
     }
 
