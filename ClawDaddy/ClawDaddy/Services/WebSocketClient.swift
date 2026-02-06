@@ -3,6 +3,9 @@ import Darwin
 import Foundation
 import os
 import SwiftUI
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
 
 private let logger = Logger(subsystem: "com.teej.ClawDaddy", category: "WebSocket")
 
@@ -56,6 +59,12 @@ final class WebSocketClient: ObservableObject {
     private var configDiagnostics = "config diagnostics unavailable"
     private var identityDiagnostics = "identity diagnostics unavailable"
     private var openclawExecutable: String?
+    private var activeExpressiveTurnID: String?
+    private var expressiveShownAt: Date?
+    private var expressiveBufferWorkItem: DispatchWorkItem?
+
+    private let expressiveTimeoutSeconds = 10.0
+    private let minimumExpressiveDisplaySeconds = 2.0
 
     private var isOpen: Bool {
         task?.state == .running
@@ -99,6 +108,9 @@ final class WebSocketClient: ObservableObject {
         idleWorkItem?.cancel()
         idleWorkItem = nil
         stopThinkingFlavor()
+        expressiveBufferWorkItem?.cancel()
+        expressiveBufferWorkItem = nil
+        expressiveShownAt = nil
         observationWorkItem?.cancel()
         observationWorkItem = nil
         task?.cancel(with: .goingAway, reason: nil)
@@ -117,10 +129,14 @@ final class WebSocketClient: ObservableObject {
         guard !trimmed.isEmpty else { return }
         let isReunion = checkReunion()
         updateClawDaddy(state: "speaking", lastResponse: pickAckLine(text: trimmed, isReunion: isReunion), isGreeting: false, isReunion: isReunion)
-        updateClawDaddy(state: "thinking")
+        updateClawDaddy(state: "thinking", lastResponse: fallbackExpressiveSlot(kind: "ack", userText: trimmed))
+        expressiveShownAt = Date()
         startThinkingFlavor()
+        let turnID = UUID().uuidString
+        activeExpressiveTurnID = turnID
         pendingMessages.append((trimmed, nil))
         connect()
+        requestExpressiveSlot(kind: "ack", userText: trimmed, turnID: turnID)
         flushPendingMessages()
     }
 
@@ -137,10 +153,14 @@ final class WebSocketClient: ObservableObject {
                 error: nil
             )
         }
-        updateClawDaddy(state: "thinking")
+        updateClawDaddy(state: "thinking", lastResponse: fallbackExpressiveSlot(kind: "ack", userText: trimmed))
+        expressiveShownAt = Date()
         startThinkingFlavor()
+        let turnID = UUID().uuidString
+        activeExpressiveTurnID = turnID
         pendingMessages.append((trimmed, subAgentId))
         connect()
+        requestExpressiveSlot(kind: "ack", userText: trimmed, turnID: turnID)
         flushPendingMessages()
     }
 
@@ -368,7 +388,6 @@ final class WebSocketClient: ObservableObject {
     }
 
     private func handleChatEvent(_ payload: Any?) {
-        stopThinkingFlavor()
         let role = extractRole(payload)
         if role == "user" {
             return
@@ -380,6 +399,27 @@ final class WebSocketClient: ObservableObject {
         } else {
             currentResponse = text
         }
+        if let shownAt = expressiveShownAt {
+            let remaining = minimumExpressiveDisplaySeconds - Date().timeIntervalSince(shownAt)
+            if remaining > 0 {
+                expressiveBufferWorkItem?.cancel()
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self else { return }
+                    self.showChatResponse()
+                }
+                expressiveBufferWorkItem = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + remaining, execute: work)
+                return
+            }
+        }
+        showChatResponse()
+    }
+
+    private func showChatResponse() {
+        stopThinkingFlavor()
+        activeExpressiveTurnID = nil
+        expressiveShownAt = nil
+        expressiveBufferWorkItem = nil
         updateClawDaddy(
             state: "speaking",
             lastResponse: currentResponse,
@@ -639,6 +679,201 @@ final class WebSocketClient: ObservableObject {
             "Claws to work.",
         ].randomElement() ?? "On it, skipper."
     }
+
+    private func requestExpressiveSlot(kind: String, userText: String, turnID: String) {
+        Task { [weak self] in
+            guard let self else { return }
+            let timeoutBudget = self.expressiveTimeoutBudgetSeconds()
+            logger.info("Expressive \(kind) start timeout_s=\(timeoutBudget)")
+            let start = Date()
+            let result = await self.fetchExpressiveSlot(kind: kind, userText: userText, timeoutSeconds: timeoutBudget)
+            let latencyMS = Int(Date().timeIntervalSince(start) * 1000)
+            let message: String
+            if let generated = result {
+                message = generated
+                logger.info("Expressive \(kind) success latency_ms=\(latencyMS)")
+            } else {
+                message = self.fallbackExpressiveSlot(kind: kind, userText: userText)
+                logger.info("Expressive \(kind) fallback latency_ms=\(latencyMS)")
+            }
+            DispatchQueue.main.async {
+                guard self.activeExpressiveTurnID == turnID else {
+                    logger.info("Expressive \(kind) dropped reason=stale_turn latency_ms=\(latencyMS)")
+                    return
+                }
+                guard self.appState.clawdaddy.state == "thinking" else {
+                    logger.info("Expressive \(kind) dropped reason=state_not_thinking latency_ms=\(latencyMS)")
+                    return
+                }
+                self.expressiveShownAt = Date()
+                self.updateClawDaddy(state: "thinking", lastResponse: message)
+            }
+        }
+    }
+
+    private func expressiveTimeoutBudgetSeconds() -> Double {
+        let configured = Double(ProcessInfo.processInfo.environment["OPENCLAW_EXPRESSIVE_TIMEOUT"] ?? "\(expressiveTimeoutSeconds)") ?? expressiveTimeoutSeconds
+        return max(0.1, configured)
+    }
+
+    private func fetchExpressiveSlot(kind: String, userText: String, timeoutSeconds: Double) async -> String? {
+        guard SettingsStore.shared.useFoundationModels else { return nil }
+        return await withTaskGroup(of: (Bool, String?).self) { group in
+            group.addTask {
+                (false, await self.generateExpressiveSlot(kind: kind, userText: userText))
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
+                return (true, nil)
+            }
+            let first = await group.next() ?? (true, nil)
+            group.cancelAll()
+            return first.0 ? nil : first.1
+        }
+    }
+
+    private func generateExpressiveSlot(kind: String, userText: String) async -> String? {
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *) {
+            let model = SystemLanguageModel.default
+            guard case .available = model.availability else { return nil }
+            let session = LanguageModelSession(instructions: expressiveSlotInstructions(for: kind, userText: userText))
+            do {
+                let response = try await session.respond(to: userText)
+                let raw = response.content
+                let maxLen = expressiveSlotMaxLength(for: kind)
+                if let sanitized = sanitizeExpressiveSlot(raw, maxLength: maxLen) {
+                    return sanitized
+                }
+                logger.warning("Expressive \(kind) sanitize failed raw=\"\(raw, privacy: .public)\" len=\(raw.count) max=\(maxLen)")
+                return nil
+            } catch {
+                logger.warning("Expressive \(kind) model error: \(error.localizedDescription, privacy: .public)")
+                return nil
+            }
+        }
+        return nil
+        #else
+        return nil
+        #endif
+    }
+
+    private enum UtteranceKind {
+        case question
+        case command
+        case statement
+    }
+
+    private func classifyUtterance(_ text: String) -> UtteranceKind {
+        let lower = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.contains("?")
+            || lower.hasPrefix("what") || lower.hasPrefix("how")
+            || lower.hasPrefix("why") || lower.hasPrefix("when")
+            || lower.hasPrefix("where") || lower.hasPrefix("who")
+            || lower.hasPrefix("which")
+            || lower.hasPrefix("is ") || lower.hasPrefix("are ")
+            || lower.hasPrefix("do ") || lower.hasPrefix("does ")
+            || lower.hasPrefix("did ") || lower.hasPrefix("can ")
+            || lower.hasPrefix("could ") || lower.hasPrefix("would ")
+            || lower.hasPrefix("should ") || lower.hasPrefix("will ") {
+            return .question
+        }
+        let commandPrefixes = [
+            "set ", "turn ", "make ", "do ", "run ", "start ", "stop ",
+            "open ", "close ", "show ", "tell ", "find ", "get ", "give ",
+            "send ", "play ", "create ", "delete ", "add ", "remove ", "help",
+        ]
+        if commandPrefixes.contains(where: { lower.hasPrefix($0) }) {
+            return .command
+        }
+        if text.split(whereSeparator: \.isWhitespace).count <= 4 {
+            return .command
+        }
+        return .statement
+    }
+
+    private func ackPool(for kind: UtteranceKind) -> [String] {
+        switch kind {
+        case .question:
+            return ["Hmm.", "Good question.", "Let me check.", "Let me see.", "Let me think.", "One sec."]
+        case .command:
+            return ["Copy.", "On it.", "Got it.", "Roger.", "Aye aye.", "Right away."]
+        case .statement:
+            return ["Noted.", "I hear you.", "Got it.", "Ah, right.", "Right."]
+        }
+    }
+
+    private func expressiveSlotInstructions(for kind: String, userText: String) -> String {
+        switch kind {
+        case "ack":
+            let pool = ackPool(for: classifyUtterance(userText))
+            let choices = pool.map { $0.replacingOccurrences(of: ".", with: "") }.joined(separator: ", ")
+            return """
+            Pick the best acknowledgment for this message from the list: \(choices). \
+            Reply with ONLY your pick and a period. Nothing else.
+            """
+        case "quip":
+            let isQuestion = classifyUtterance(userText) == .question
+            let context = isQuestion
+                ? "The user asked a question."
+                : "The user gave a command or statement."
+            return """
+            You are a nautical captain. \(context)
+            Write a short, witty in-character remark about their topic.
+            One sentence, under 90 characters. Do not answer the question directly.
+            Return ONLY the quip, nothing else.
+            """
+        case "bridge":
+            return """
+            You are a nautical captain about to deliver an answer.
+            Write a short transition line leading into it.
+            Examples: "Here is the read.", "My take.", "Quick pass incoming."
+            One sentence, under 70 characters.
+            Return ONLY the bridge line, nothing else.
+            """
+        default:
+            return ""
+        }
+    }
+
+    private func expressiveSlotMaxLength(for kind: String) -> Int {
+        switch kind {
+        case "ack": return 25
+        case "quip": return 90
+        case "bridge": return 70
+        default: return 90
+        }
+    }
+
+    private func fallbackExpressiveSlot(kind: String, userText: String = "") -> String {
+        switch kind {
+        case "ack":
+            return ackPool(for: classifyUtterance(userText)).randomElement() ?? "Copy."
+        case "quip":
+            return ["Good question, captain.", "Sharp ask.", "Aye, setting course.", "Crew is on it."].randomElement() ?? "Aye."
+        case "bridge":
+            return ["Here is the read.", "My take.", "Here is what I see.", "Quick pass incoming."].randomElement() ?? "Here is the read."
+        default:
+            return ""
+        }
+    }
+
+    private func sanitizeExpressiveSlot(_ text: String, maxLength: Int) -> String? {
+        let squashed = text
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\t", with: " ")
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !squashed.isEmpty, squashed.count <= maxLength else { return nil }
+        guard !squashed.contains("```"),
+              !squashed.localizedCaseInsensitiveContains("http://"),
+              !squashed.localizedCaseInsensitiveContains("https://") else {
+            return nil
+        }
+        return squashed
+    }
+
 
     private func normalizeAgentState(_ rawState: String) -> String {
         if ["waiting", "needs_input", "input", "waiting_for_input"].contains(rawState) {

@@ -6,8 +6,12 @@ final class SettingsStore: ObservableObject {
     @Published var pttKey: PTTKey {
         didSet { save() }
     }
+    @Published var useFoundationModels: Bool {
+        didSet { saveFoundationModelsToggle() }
+    }
 
     private let key = "clawdaddy.pttKey"
+    private let foundationModelsKey = "clawdaddy.useFoundationModels"
 
     private init() {
         if let data = UserDefaults.standard.data(forKey: key),
@@ -15,6 +19,11 @@ final class SettingsStore: ObservableObject {
             pttKey = decoded
         } else {
             pttKey = .defaultKey
+        }
+        if UserDefaults.standard.object(forKey: foundationModelsKey) == nil {
+            useFoundationModels = true
+        } else {
+            useFoundationModels = UserDefaults.standard.bool(forKey: foundationModelsKey)
         }
     }
 
@@ -25,5 +34,10 @@ final class SettingsStore: ObservableObject {
 
     func resetToDefault() {
         pttKey = .defaultKey
+        useFoundationModels = true
+    }
+
+    private func saveFoundationModelsToggle() {
+        UserDefaults.standard.set(useFoundationModels, forKey: foundationModelsKey)
     }
 }

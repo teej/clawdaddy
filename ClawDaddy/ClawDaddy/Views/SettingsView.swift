@@ -51,6 +51,9 @@ struct SettingsView: View {
                 }
             }
 
+            Toggle("Use Foundation Models (when available)", isOn: $settings.useFoundationModels)
+                .toggleStyle(.switch)
+
             HStack {
                 Button("Reset to Default") {
                     settings.resetToDefault()
