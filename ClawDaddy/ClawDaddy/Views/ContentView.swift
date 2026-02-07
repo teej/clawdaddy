@@ -46,7 +46,6 @@ struct ContentView: View {
     @State private var didShowPermissionGranted = false
     @Environment(\.colorScheme) private var colorScheme
 
-    private let maxBubbles = 4
     private let toastInsets = EdgeInsets(top: 16, leading: 16, bottom: 8, trailing: 44)
     private let bottomRowPadding = EdgeInsets(top: 0, leading: 0, bottom: 16, trailing: 24)
     private let bubbleSpacing: CGFloat = 10
@@ -142,7 +141,7 @@ struct ContentView: View {
                 withAnimation(.easeOut(duration: 0.25)) {
                     bubbles.removeAll()
                 }
-                lastAgentMessages.removeAll()
+                    lastAgentMessages.removeAll()
                 lastAgentStates.removeAll()
                 lastClawDaddyMessage = ""
                 currentClawDaddyBubbleId = nil
@@ -291,7 +290,8 @@ struct ContentView: View {
             daddyModel.send(.reaction(.alert))
             return
         }
-        if permissions.speechStatus != .granted {
+        // Apple STT requires Speech Recognition permission; Voxtral does not
+        if settings.sttProvider == .apple, permissions.speechStatus != .granted {
             showPermissionBubble(
                 action: permissions.speechStatus == .notDetermined ? .requestSpeech : .openSpeechSettings,
                 line: PermissionLines.randomLine(for: .speech)
@@ -299,7 +299,7 @@ struct ContentView: View {
             daddyModel.send(.reaction(.alert))
             return
         }
-        speech.startRecording { transcript in
+        speech.startRecording(provider: settings.sttProvider, apiKey: settings.mistralApiKey) { transcript in
             let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
             lastTranscriptLength = trimmed.count
             if handleEmoteCommand(trimmed) {
@@ -378,10 +378,6 @@ struct ContentView: View {
                 stopPushToTalk()
             }
         }
-    }
-
-    private var visibleBubbles: [BubbleItem] {
-        Array(bubbles.suffix(maxBubbles))
     }
 
     private func renderClawDaddyMessage(_ text: String) -> String {
@@ -512,15 +508,16 @@ struct ContentView: View {
 
     private var toastLayer: some View {
         Group {
-            if !visibleBubbles.isEmpty {
+            if !bubbles.isEmpty {
                 VStack(alignment: .trailing, spacing: 6) {
                     Spacer(minLength: 0)
-                    ForEach(visibleBubbles) { bubble in
+                    ForEach(bubbles) { bubble in
+                        let isTypewriter = bubble.permissionAction == nil && !bubble.isInteractive && bubble.agentId == nil
                         SpeechBubbleView(
                             text: bubble.text,
                             isInteractive: bubble.isInteractive,
-                            typewriter: bubble.permissionAction == nil && !bubble.isInteractive && bubble.agentId == nil,
-                            onRevealChange: (bubble.permissionAction == nil && !bubble.isInteractive && bubble.agentId == nil) ? { revealing in
+                            typewriter: isTypewriter,
+                            onRevealChange: isTypewriter ? { revealing in
                                 isTypewriterRevealing = revealing
                             } : nil,
                             actionLabel: permissionActionLabel(for: bubble.permissionAction),
@@ -546,6 +543,21 @@ struct ContentView: View {
                 .padding(.leading, toastInsets.leading)
                 .padding(.trailing, toastInsets.trailing)
                 .padding(.bottom, toastInsets.bottom + bottomRowHeight + bubbleSpacing)
+                .compositingGroup()
+                .mask {
+                    GeometryReader { geo in
+                        VStack(spacing: 0) {
+                            LinearGradient(
+                                colors: [.clear, .black],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 40)
+                            Rectangle()
+                                .frame(height: max(0, geo.size.height - 40))
+                        }
+                    }
+                }
                 .debugBorder(showDebugBorders, color: .cyan)
             }
         }
@@ -599,16 +611,6 @@ struct ContentView: View {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             let item = BubbleItem(id: UUID().uuidString, text: text, isInteractive: isInteractive, agentId: agentId)
             bubbles.append(item)
-            if bubbles.count > maxBubbles {
-                let overflow = bubbles.count - maxBubbles
-                for _ in 0..<overflow {
-                    if let index = bubbles.firstIndex(where: { !$0.isInteractive }) {
-                        bubbles.remove(at: index)
-                    } else {
-                        bubbles.removeFirst()
-                    }
-                }
-            }
         }
     }
 
@@ -627,19 +629,7 @@ struct ContentView: View {
             currentClawDaddyBubbleId = item.id
             lastClawDaddyMessage = text
             bubbles.append(item)
-            if bubbles.count > maxBubbles {
-                let overflow = bubbles.count - maxBubbles
-                for _ in 0..<overflow {
-                    if let index = bubbles.firstIndex(where: { !$0.isInteractive }) {
-                        if bubbles[index].id == currentClawDaddyBubbleId {
-                            currentClawDaddyBubbleId = nil
-                        }
-                        bubbles.remove(at: index)
-                    } else {
-                        bubbles.removeFirst()
-                    }
-                }
-            }
+            // OpenClaw messages never auto-dismiss
         }
     }
 
@@ -816,21 +806,7 @@ struct ContentView: View {
                 permissionAction: action
             )
             bubbles.append(item)
-            if bubbles.count > maxBubbles {
-                let overflow = bubbles.count - maxBubbles
-                for _ in 0..<overflow {
-                    if let index = bubbles.firstIndex(where: { !$0.isInteractive && $0.permissionAction == nil }) {
-                        bubbles.remove(at: index)
-                    } else if let index = bubbles.firstIndex(where: { !$0.isInteractive }) {
-                        if bubbles[index].id == currentClawDaddyBubbleId {
-                            currentClawDaddyBubbleId = nil
-                        }
-                        bubbles.remove(at: index)
-                    } else {
-                        bubbles.removeFirst()
-                    }
-                }
-            }
+            // Permission bubbles persist until acted on — no auto-dismiss
         }
     }
 
@@ -894,3 +870,4 @@ struct ContentView: View {
         }
     }
 }
+

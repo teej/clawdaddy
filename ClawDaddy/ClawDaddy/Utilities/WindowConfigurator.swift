@@ -28,6 +28,7 @@ struct WindowConfigurator: NSViewRepresentable {
 
             window.isOpaque = false
             window.backgroundColor = .clear
+            window.styleMask.remove(.titled)
             window.level = .floating
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             window.titleVisibility = .hidden

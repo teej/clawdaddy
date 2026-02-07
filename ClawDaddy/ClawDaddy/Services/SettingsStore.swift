@@ -1,5 +1,10 @@
 import Foundation
 
+enum STTProvider: String, Codable, CaseIterable {
+    case apple
+    case voxtral
+}
+
 final class SettingsStore: ObservableObject {
     static let shared = SettingsStore()
 
@@ -12,10 +17,18 @@ final class SettingsStore: ObservableObject {
     @Published var showMessageProvenance: Bool {
         didSet { saveShowMessageProvenanceToggle() }
     }
+    @Published var sttProvider: STTProvider {
+        didSet { saveSttProvider() }
+    }
+    @Published var mistralApiKey: String {
+        didSet { saveMistralApiKey() }
+    }
 
     private let key = "clawdaddy.pttKey"
     private let foundationModelsKey = "clawdaddy.useFoundationModels"
     private let showMessageProvenanceKey = "clawdaddy.showMessageProvenance"
+    private let sttProviderKey = "clawdaddy.sttProvider"
+    private let mistralApiKeyKey = "clawdaddy.mistralApiKey"
 
     private init() {
         if let data = UserDefaults.standard.data(forKey: key),
@@ -34,6 +47,13 @@ final class SettingsStore: ObservableObject {
         } else {
             showMessageProvenance = UserDefaults.standard.bool(forKey: showMessageProvenanceKey)
         }
+        if let raw = UserDefaults.standard.string(forKey: sttProviderKey),
+           let provider = STTProvider(rawValue: raw) {
+            sttProvider = provider
+        } else {
+            sttProvider = .apple
+        }
+        mistralApiKey = UserDefaults.standard.string(forKey: mistralApiKeyKey) ?? ""
     }
 
     private func save() {
@@ -45,6 +65,8 @@ final class SettingsStore: ObservableObject {
         pttKey = .defaultKey
         useFoundationModels = true
         showMessageProvenance = true
+        sttProvider = .apple
+        mistralApiKey = ""
     }
 
     private func saveFoundationModelsToggle() {
@@ -53,5 +75,13 @@ final class SettingsStore: ObservableObject {
 
     private func saveShowMessageProvenanceToggle() {
         UserDefaults.standard.set(showMessageProvenance, forKey: showMessageProvenanceKey)
+    }
+
+    private func saveSttProvider() {
+        UserDefaults.standard.set(sttProvider.rawValue, forKey: sttProviderKey)
+    }
+
+    private func saveMistralApiKey() {
+        UserDefaults.standard.set(mistralApiKey, forKey: mistralApiKeyKey)
     }
 }

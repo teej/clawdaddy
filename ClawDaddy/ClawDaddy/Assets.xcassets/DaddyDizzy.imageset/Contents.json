@@ -4,6 +4,10 @@
       "filename" : "thedaddy-dizzy.png",
       "idiom" : "mac",
       "scale" : "1x"
+    },
+    {
+      "idiom" : "mac",
+      "scale" : "2x"
     }
   ],
   "info" : {

@@ -51,6 +51,32 @@ struct SettingsView: View {
                 }
             }
 
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Speech-to-Text")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+
+                Picker("Provider", selection: $settings.sttProvider) {
+                    Text("Apple").tag(STTProvider.apple)
+                    Text("Voxtral").tag(STTProvider.voxtral)
+                }
+                .pickerStyle(.segmented)
+
+                if settings.sttProvider == .voxtral {
+                    SecureField("Mistral API Key", text: $settings.mistralApiKey)
+                        .textFieldStyle(.roundedBorder)
+
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(settings.mistralApiKey.isEmpty ? .red : .green)
+                            .frame(width: 8, height: 8)
+                        Text(settings.mistralApiKey.isEmpty ? "API key required" : "API key set")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             Toggle("Use Foundation Models (when available)", isOn: $settings.useFoundationModels)
                 .toggleStyle(.switch)
 

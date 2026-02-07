@@ -13,6 +13,7 @@ struct ClawDaddyApp: App {
         WindowGroup {
             ContentView()
         }
+        .windowStyle(.hiddenTitleBar)
 
         Settings {
             SettingsView(
