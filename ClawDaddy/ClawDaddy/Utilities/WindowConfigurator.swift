@@ -94,7 +94,11 @@ final class WindowConfigView: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if let window {
-            onWindowChange?(window)
+            // Defer to next run loop iteration — mutating styleMask during
+            // the layout pass that inserts this view crashes on macOS 15.0+
+            DispatchQueue.main.async { [weak self] in
+                self?.onWindowChange?(window)
+            }
         }
     }
 }
