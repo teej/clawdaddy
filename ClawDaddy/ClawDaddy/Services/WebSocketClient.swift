@@ -1451,10 +1451,13 @@ final class WebSocketClient: ObservableObject {
         guard let identity = deviceIdentity else { return nil }
         let signedAt = Int(Date().timeIntervalSince1970 * 1000)
         let nonce = challenge?["nonce"] as? String
+        // When authMode is "password", the gateway reads connectParams.auth?.token
+        // (which is nil) for the payload — NOT auth.password. We must match.
+        let tokenForPayload = authMode == "password" ? nil : apiKey
         let payload = buildDeviceAuthPayload(
             deviceID: identity.deviceID,
             signedAtMS: signedAt,
-            token: apiKey,
+            token: tokenForPayload,
             nonce: nonce
         )
         guard let signature = signPayload(seed: identity.privateKeySeed, payload: payload) else {
