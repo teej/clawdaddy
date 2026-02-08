@@ -19,8 +19,9 @@ struct ContentView: View {
     @State private var wasRecording = false
     @State private var daddyModel = DaddyAnimationModel()
     @State private var bubbles: [BubbleItem] = []
-    @State private var lastClawDaddyMessage = ""
-    @State private var currentClawDaddyBubbleId: String?
+    @State private var lastClawDaddyStatusMessage = ""
+    @State private var lastClawDaddyResponseMessage = ""
+    @State private var currentClawDaddyResponseBubbleId: String?
     @State private var lastAgentMessages: [String: String] = [:]
     @State private var lastAgentStates: [String: String] = [:]
     @State private var lastTranscriptLength = 0
@@ -44,11 +45,14 @@ struct ContentView: View {
     @State private var lastSentAnimState: DaddyAnimState = .idle
     @State private var lastHeroMomentAt = Date.distantPast
     @State private var didShowPermissionGranted = false
+    @State private var bubbleHeights: [String: CGFloat] = [:]
+    @State private var bubbleFadeTasks: [String: Task<Void, Never>] = [:]
     @Environment(\.colorScheme) private var colorScheme
 
     private let toastInsets = EdgeInsets(top: 16, leading: 16, bottom: 8, trailing: 44)
     private let bottomRowPadding = EdgeInsets(top: 0, leading: 0, bottom: 16, trailing: 24)
     private let bubbleSpacing: CGFloat = 10
+    private let stackSpacing: CGFloat = 6
     private let showDebugBorders = false
 
     private var isLayoutSelfTest: Bool {
@@ -89,6 +93,7 @@ struct ContentView: View {
             stopAllMonitors()
             permissions.stopMonitoring()
             sleepTask?.cancel()
+            cancelAllBubbleFadeTasks()
         }
         .sheet(isPresented: $showingInput) {
             InputSheet(
@@ -117,9 +122,7 @@ struct ContentView: View {
         .onChange(of: socket.appState.clawdaddy.lastResponse) { newValue in
             guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            let rendered = renderClawDaddyMessage(trimmed)
-            guard !trimmed.isEmpty, rendered != lastClawDaddyMessage else { return }
-            upsertClawDaddyBubble(text: rendered)
+            guard !trimmed.isEmpty else { return }
             if socket.appState.clawdaddy.isReunion {
                 daddyModel.send(.emote(.surprised))
                 daddyModel.send(.dance)
@@ -127,6 +130,10 @@ struct ContentView: View {
                 daddyModel.send(.salute)
                 daddyModel.send(.dance)
             }
+        }
+        .onReceive(socket.bubbleEvents) { event in
+            guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
+            handleClawDaddyBubbleEvent(event)
         }
         .onChange(of: socket.appState.clawdaddy.state) { _, newValue in
             guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
@@ -141,17 +148,25 @@ struct ContentView: View {
                 withAnimation(.easeOut(duration: 0.25)) {
                     bubbles.removeAll()
                 }
-                    lastAgentMessages.removeAll()
+                cancelAllBubbleFadeTasks()
+                bubbleHeights.removeAll()
+                lastAgentMessages.removeAll()
                 lastAgentStates.removeAll()
-                lastClawDaddyMessage = ""
-                currentClawDaddyBubbleId = nil
+                lastClawDaddyStatusMessage = ""
+                lastClawDaddyResponseMessage = ""
+                currentClawDaddyResponseBubbleId = nil
             }
             updateSubAgentBubbles(newState.subAgents)
         }
         .onPreferenceChange(BottomRowHeightKey.self) { newValue in
             if abs(bottomRowHeight - newValue) > 0.5 {
                 bottomRowHeight = newValue
+                enforceBubbleCapacity()
             }
+        }
+        .onPreferenceChange(BubbleHeightsKey.self) { heights in
+            bubbleHeights.merge(heights) { _, new in new }
+            enforceBubbleCapacity()
         }
         .onChange(of: colorScheme) { _, newScheme in
             guard let last = lastColorScheme, last != newScheme else {
@@ -261,12 +276,19 @@ struct ContentView: View {
         case openAccessibilitySettings
     }
 
+    private enum BubbleSource {
+        case other
+        case clawdaddyStatus
+        case clawdaddyResponse
+    }
+
     private struct BubbleItem: Identifiable {
         let id: String
         let text: String
         let isInteractive: Bool
         let agentId: String?
         var permissionAction: PermissionAction? = nil
+        var source: BubbleSource = .other
     }
 
     private func submitInput() {
@@ -380,9 +402,9 @@ struct ContentView: View {
         }
     }
 
-    private func renderClawDaddyMessage(_ text: String) -> String {
+    private func renderClawDaddyMessage(_ text: String, provenance: String?) -> String {
         guard settings.showMessageProvenance else { return text }
-        guard let provenance = socket.lastClawDaddyProvenance, !provenance.isEmpty else { return text }
+        guard let provenance, !provenance.isEmpty else { return text }
         return "[\(provenance)] \(text)"
     }
 
@@ -518,7 +540,7 @@ struct ContentView: View {
     private var toastLayer: some View {
         Group {
             if !bubbles.isEmpty {
-                VStack(alignment: .trailing, spacing: 6) {
+                VStack(alignment: .trailing, spacing: stackSpacing) {
                     Spacer(minLength: 0)
                     ForEach(bubbles) { bubble in
                         let isTypewriter = bubble.permissionAction == nil && !bubble.isInteractive && bubble.agentId == nil
@@ -543,8 +565,16 @@ struct ContentView: View {
                         .debugBorder(showDebugBorders, color: .purple)
                         .transition(.asymmetric(
                             insertion: .move(edge: .trailing).combined(with: .opacity),
-                            removal: .opacity.combined(with: .move(edge: .top))
+                            removal: .opacity
                         ))
+                        .background(
+                            GeometryReader { proxy in
+                                Color.clear.preference(
+                                    key: BubbleHeightsKey.self,
+                                    value: [bubble.id: proxy.size.height]
+                                )
+                            }
+                        )
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -553,20 +583,6 @@ struct ContentView: View {
                 .padding(.trailing, toastInsets.trailing)
                 .padding(.bottom, toastInsets.bottom + bottomRowHeight + bubbleSpacing)
                 .compositingGroup()
-                .mask {
-                    GeometryReader { geo in
-                        VStack(spacing: 0) {
-                            LinearGradient(
-                                colors: [.clear, .black],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                            .frame(height: 40)
-                            Rectangle()
-                                .frame(height: max(0, geo.size.height - 40))
-                        }
-                    }
-                }
                 .debugBorder(showDebugBorders, color: .cyan)
             }
         }
@@ -616,40 +632,88 @@ struct ContentView: View {
         )
     }
 
-    private let maxBubbles = 6
-
     private func appendBubble(text: String, isInteractive: Bool, agentId: String?) {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             let item = BubbleItem(id: UUID().uuidString, text: text, isInteractive: isInteractive, agentId: agentId)
             bubbles.append(item)
-            trimBubbles()
         }
+        scheduleBubbleFade(for: bubbles.last)
+        enforceBubbleCapacity()
     }
 
-    private func trimBubbles() {
-        while bubbles.count > maxBubbles {
-            bubbles.removeFirst()
-        }
-    }
-
-    private func upsertClawDaddyBubble(text: String) {
-        let isSpeaking = socket.appState.clawdaddy.state == "speaking"
-        if let currentId = currentClawDaddyBubbleId,
-           let index = bubbles.firstIndex(where: { $0.id == currentId }) {
-            if isSpeaking || text.hasPrefix(lastClawDaddyMessage) || lastClawDaddyMessage.hasPrefix(text) {
-                bubbles[index] = BubbleItem(id: currentId, text: text, isInteractive: false, agentId: nil)
-                lastClawDaddyMessage = text
-                return
+    private func handleClawDaddyBubbleEvent(_ event: WebSocketClient.BubbleEvent) {
+        switch event {
+        case let .stateChanged(from: oldState, to: newState):
+            if oldState != "speaking", newState == "speaking" {
+                currentClawDaddyResponseBubbleId = nil
+                lastClawDaddyResponseMessage = ""
             }
+            if oldState == "speaking", newState != "speaking" {
+                scheduleFadeForCurrentClawDaddyBubble()
+            }
+        case let .message(kind: kind, text: rawText, provenance: provenance):
+            let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            let rendered = renderClawDaddyMessage(trimmed, provenance: provenance)
+            switch kind {
+            case .stream:
+                upsertClawDaddyResponseBubble(text: rendered)
+            case .status:
+                upsertClawDaddyStatusBubble(text: rendered)
+            }
+        }
+    }
+
+    private func upsertClawDaddyResponseBubble(text: String) {
+        guard text != lastClawDaddyResponseMessage else { return }
+        if let currentId = currentClawDaddyResponseBubbleId,
+           let index = bubbles.firstIndex(where: { $0.id == currentId }) {
+            bubbles[index] = BubbleItem(
+                id: currentId,
+                text: text,
+                isInteractive: false,
+                agentId: nil,
+                source: .clawdaddyResponse
+            )
+            lastClawDaddyResponseMessage = text
+            cancelBubbleFadeTask(for: currentId)
+            enforceBubbleCapacity()
+            return
         }
 
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            let item = BubbleItem(id: UUID().uuidString, text: text, isInteractive: false, agentId: nil)
-            currentClawDaddyBubbleId = item.id
-            lastClawDaddyMessage = text
+            let item = BubbleItem(
+                id: UUID().uuidString,
+                text: text,
+                isInteractive: false,
+                agentId: nil,
+                source: .clawdaddyResponse
+            )
+            currentClawDaddyResponseBubbleId = item.id
+            lastClawDaddyResponseMessage = text
             bubbles.append(item)
-            trimBubbles()
         }
+        if let id = currentClawDaddyResponseBubbleId {
+            cancelBubbleFadeTask(for: id)
+        }
+        enforceBubbleCapacity()
+    }
+
+    private func upsertClawDaddyStatusBubble(text: String) {
+        guard text != lastClawDaddyStatusMessage else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            let item = BubbleItem(
+                id: UUID().uuidString,
+                text: text,
+                isInteractive: false,
+                agentId: nil,
+                source: .clawdaddyStatus
+            )
+            lastClawDaddyStatusMessage = text
+            bubbles.append(item)
+        }
+        scheduleBubbleFade(for: bubbles.last)
+        enforceBubbleCapacity()
     }
 
     private func seedBubblesForLayoutTest() {
@@ -825,14 +889,15 @@ struct ContentView: View {
                 permissionAction: action
             )
             bubbles.append(item)
-            trimBubbles()
         }
+        enforceBubbleCapacity()
     }
 
     private func handlePermissionAction(_ action: PermissionAction, bubbleId: String) {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             bubbles.removeAll { $0.id == bubbleId }
         }
+        cancelBubbleFadeTask(for: bubbleId)
         switch action {
         case .requestMic:
             Task {
@@ -888,5 +953,115 @@ struct ContentView: View {
             return nil
         }
     }
-}
 
+    private func availableBubbleHeight() -> CGFloat {
+        let verticalInsets = toastInsets.top + toastInsets.bottom + bottomRowHeight + bubbleSpacing
+        return max(0, windowSize.height - verticalInsets)
+    }
+
+    private func bubbleHeight(for bubble: BubbleItem) -> CGFloat {
+        if let measured = bubbleHeights[bubble.id], measured > 0 {
+            return measured
+        }
+        // Fallback estimate before first layout pass.
+        let charsPerLine = 44.0
+        let lineCount = max(1, Int(ceil(Double(bubble.text.count) / charsPerLine)))
+        let textHeight = CGFloat(lineCount) * 16
+        let actionHeight: CGFloat = bubble.permissionAction == nil ? 0 : 34
+        return 24 + textHeight + actionHeight
+    }
+
+    private func stackHeight() -> CGFloat {
+        var total: CGFloat = 0
+        for (index, bubble) in bubbles.enumerated() {
+            if index > 0 {
+                total += stackSpacing
+            }
+            total += bubbleHeight(for: bubble)
+        }
+        return total
+    }
+
+    private func enforceBubbleCapacity() {
+        guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
+        var guardrail = 0
+        while stackHeight() > availableBubbleHeight(), guardrail < 40 {
+            guardrail += 1
+            guard let id = oldestEvictableBubbleId() else { break }
+            evictBubble(id)
+        }
+    }
+
+    private func oldestEvictableBubbleId() -> String? {
+        if let passive = bubbles.first(where: { !$0.isInteractive && $0.permissionAction == nil }) {
+            return passive.id
+        }
+        return bubbles.first?.id
+    }
+
+    private func scheduleBubbleFade(for bubble: BubbleItem?) {
+        guard !isLayoutSelfTest, !isSubAgentSelfTest else { return }
+        guard let bubble else { return }
+        guard !bubble.isInteractive, bubble.permissionAction == nil else { return }
+
+        cancelBubbleFadeTask(for: bubble.id)
+        let delay = bubbleFadeDelay(for: bubble)
+        bubbleFadeTasks[bubble.id] = Task {
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                evictBubble(bubble.id)
+            }
+        }
+    }
+
+    private func bubbleFadeDelay(for bubble: BubbleItem) -> TimeInterval {
+        var delay: Double = 40.0
+
+        let chars = bubble.text.count
+        let sizePenalty = min(12.0, Double(max(0, chars - 80)) / 70.0)
+        delay -= sizePenalty
+
+        let crowdPenalty = min(12.0, Double(max(0, bubbles.count - 3)) * 0.7)
+        delay -= crowdPenalty
+
+        if let index = bubbles.firstIndex(where: { $0.id == bubble.id }) {
+            let distanceFromBottom = bubbles.count - 1 - index
+            let edgePenalty = min(8.0, Double(distanceFromBottom) * 0.5)
+            delay -= edgePenalty
+        }
+
+        return max(12.0, min(48.0, delay))
+    }
+
+    private func scheduleFadeForCurrentClawDaddyBubble() {
+        guard let id = currentClawDaddyResponseBubbleId,
+              let bubble = bubbles.first(where: { $0.id == id }) else { return }
+        scheduleBubbleFade(for: bubble)
+    }
+
+    private func evictBubble(_ id: String) {
+        guard bubbles.contains(where: { $0.id == id }) else { return }
+        withAnimation(.easeOut(duration: 0.25)) {
+            bubbles.removeAll { $0.id == id }
+        }
+        bubbleHeights[id] = nil
+        cancelBubbleFadeTask(for: id)
+        if currentClawDaddyResponseBubbleId == id {
+            currentClawDaddyResponseBubbleId = nil
+            lastClawDaddyResponseMessage = ""
+        }
+    }
+
+    private func cancelBubbleFadeTask(for id: String) {
+        bubbleFadeTasks[id]?.cancel()
+        bubbleFadeTasks[id] = nil
+    }
+
+    private func cancelAllBubbleFadeTasks() {
+        for task in bubbleFadeTasks.values {
+            task.cancel()
+        }
+        bubbleFadeTasks.removeAll()
+    }
+}

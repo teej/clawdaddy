@@ -3,6 +3,7 @@ import Darwin
 import Foundation
 import os
 import SwiftUI
+import Combine
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
@@ -23,7 +24,18 @@ private struct DeviceIdentity {
 
 @MainActor
 final class WebSocketClient: ObservableObject {
+    enum BubbleKind {
+        case stream
+        case status
+    }
+
+    enum BubbleEvent {
+        case message(kind: BubbleKind, text: String, provenance: String?)
+        case stateChanged(from: String, to: String)
+    }
+
     @Published var appState = AppState.empty
+    let bubbleEvents = PassthroughSubject<BubbleEvent, Never>()
 
     private var task: URLSessionWebSocketTask?
     private var isConnecting = false
@@ -75,7 +87,6 @@ final class WebSocketClient: ObservableObject {
         "surprised": .surprised,
         "warm": .wink,
     ]
-    @Published private(set) var lastClawDaddyProvenance: String?
 
     private let expressiveTimeoutSeconds = 10.0
     private let minimumExpressiveDisplaySeconds = 2.0
@@ -526,10 +537,15 @@ final class WebSocketClient: ObservableObject {
         isReunion: Bool? = nil,
         provenance: String? = nil
     ) {
+        let previousState = appState.clawdaddy.state
         appState.clawdaddy.state = state
+        if previousState != state {
+            bubbleEvents.send(.stateChanged(from: previousState, to: state))
+        }
         if let lastResponse {
             appState.clawdaddy.lastResponse = lastResponse
-            lastClawDaddyProvenance = provenance
+            let kind: BubbleKind = (provenance == "backend:response") ? .stream : .status
+            bubbleEvents.send(.message(kind: kind, text: lastResponse, provenance: provenance))
         }
         if let isGreeting {
             appState.clawdaddy.isGreeting = isGreeting
