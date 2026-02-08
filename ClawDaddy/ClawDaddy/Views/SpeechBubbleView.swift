@@ -118,7 +118,7 @@ struct SpeechBubbleView: View {
             }
         }
         .shadow(color: Color.black.opacity(0.2), radius: 6, x: 0, y: 2)
-        .frame(maxWidth: 280, alignment: .leading)
+        .frame(maxWidth: 336, alignment: .leading)
         .animation(.easeInOut(duration: 0.15), value: isHovered)
         .onHover { hovering in
             isHovered = hovering

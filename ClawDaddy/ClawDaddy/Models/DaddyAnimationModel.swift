@@ -46,6 +46,8 @@ enum EmoteStyle: Int, CaseIterable {
     case nod
     case shake
     case bow
+    case laugh
+    case sunglasses
 }
 
 struct AnimationStep {
@@ -889,6 +891,22 @@ final class DaddyAnimationModel {
                 AnimationStep(rotation: 12.0, offset: CGSize(width: 0, height: 6), scaleX: 1.0, scaleY: 0.92, duration: 0.2),
                 AnimationStep(rotation: 12.0, offset: CGSize(width: 0, height: 6), scaleX: 1.0, scaleY: 0.92, duration: 0.5),
                 AnimationStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.2),
+            ]
+        case .laugh:
+            steps = [
+                AnimationStep(rotation: -3.0, offset: CGSize(width: -2, height: 2), scaleX: 1.04, scaleY: 0.96, duration: 0.08, sprite: "DaddyLaugh"),
+                AnimationStep(rotation: 3.0, offset: CGSize(width: 2, height: 2), scaleX: 1.04, scaleY: 0.96, duration: 0.08),
+                AnimationStep(rotation: -2.0, offset: CGSize(width: -1, height: 1), scaleX: 1.02, scaleY: 0.98, duration: 0.08),
+                AnimationStep(rotation: 2.0, offset: CGSize(width: 1, height: 1), scaleX: 1.02, scaleY: 0.98, duration: 0.08),
+                AnimationStep(rotation: 0.0, offset: CGSize(width: 0, height: -2), scaleX: 0.99, scaleY: 1.02, duration: 0.1),
+            ]
+        case .sunglasses:
+            useFollowThrough = false
+            steps = [
+                AnimationStep(rotation: 0.0, offset: CGSize(width: 0, height: -6), scaleX: 0.97, scaleY: 1.06, duration: 0.14, sprite: "DaddySunglasses"),
+                AnimationStep(rotation: -2.0, offset: CGSize(width: 0, height: -3), scaleX: 1.02, scaleY: 0.98, duration: 0.12),
+                AnimationStep(rotation: -2.0, offset: CGSize(width: 0, height: -3), scaleX: 1.02, scaleY: 0.98, duration: 0.6),
+                AnimationStep(rotation: 0.0, offset: .zero, scaleX: 1.0, scaleY: 1.0, duration: 0.18),
             ]
         case .none:
             steps = []

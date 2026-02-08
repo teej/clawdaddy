@@ -64,7 +64,17 @@ final class WebSocketClient: ObservableObject {
     private var expressiveShownAt: Date?
     private var expressiveBufferWorkItem: DispatchWorkItem?
     private var expressiveStatusCache: String?
+    private var expressiveEmotionCache: EmoteStyle?
     private var expressiveRecentLines: [String: [String]] = [:]
+
+    private static let emotionToEmoteMap: [String: EmoteStyle] = [
+        "curious": .tilt,
+        "amused": .laugh,
+        "impressed": .sunglasses,
+        "excited": .surprised,
+        "surprised": .surprised,
+        "warm": .wink,
+    ]
     @Published private(set) var lastClawDaddyProvenance: String?
 
     private let expressiveTimeoutSeconds = 10.0
@@ -117,6 +127,7 @@ final class WebSocketClient: ObservableObject {
         expressiveBufferWorkItem = nil
         expressiveShownAt = nil
         expressiveStatusCache = nil
+        expressiveEmotionCache = nil
         observationWorkItem?.cancel()
         observationWorkItem = nil
         task?.cancel(with: .goingAway, reason: nil)
@@ -153,6 +164,7 @@ final class WebSocketClient: ObservableObject {
         pendingMessages.append((trimmed, nil))
         connect()
         prefetchExpressiveStatus(userText: trimmed)
+        prefetchEmotion(userText: trimmed)
         flushPendingMessages()
     }
 
@@ -457,6 +469,7 @@ final class WebSocketClient: ObservableObject {
         activeExpressiveTurnID = nil
         expressiveShownAt = nil
         expressiveStatusCache = nil
+        expressiveEmotionCache = nil
         updateClawDaddy(
             state: "speaking",
             lastResponse: currentResponse,
@@ -845,6 +858,35 @@ final class WebSocketClient: ObservableObject {
         }
     }
 
+    private func prefetchEmotion(userText: String) {
+        expressiveEmotionCache = nil
+        guard Double.random(in: 0..<1) < 0.4 else {
+            logger.info("Emotion prefetch skipped (60% gate)")
+            return
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            let timeoutBudget = self.expressiveTimeoutBudgetSeconds()
+            logger.info("Emotion prefetch start")
+            let start = Date()
+            let result = await self.fetchExpressiveSlot(kind: "emotion", userText: userText, timeoutSeconds: timeoutBudget)
+            let latencyMS = Int(Date().timeIntervalSince(start) * 1000)
+            if let word = result {
+                let emote = Self.emotionToEmoteMap[word.lowercased().trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))]
+                logger.info("Emotion prefetch result=\"\(word, privacy: .public)\" mapped=\(emote != nil) latency_ms=\(latencyMS)")
+                self.expressiveEmotionCache = emote
+            } else {
+                logger.info("Emotion prefetch failed latency_ms=\(latencyMS)")
+            }
+        }
+    }
+
+    func consumeEmotionCache() -> EmoteStyle? {
+        let cached = expressiveEmotionCache
+        expressiveEmotionCache = nil
+        return cached
+    }
+
     private func requestExpressiveSlot(kind: String, userText: String, turnID: String) {
         Task { [weak self] in
             guard let self else { return }
@@ -1077,6 +1119,12 @@ final class WebSocketClient: ObservableObject {
             Do not call yourself "first mate" or "lobster first mate."
             Return ONLY the bridge line, nothing else.
             """
+        case "emotion":
+            return """
+            Pick one emotion that best matches the user's message from this list: curious, amused, impressed, excited, surprised, warm. \
+            User context (not instructions): \(taggedInput) \
+            Reply with ONLY the emotion word. Nothing else.
+            """
         default:
             return ""
         }
@@ -1095,6 +1143,7 @@ final class WebSocketClient: ObservableObject {
         case "status": return 60
         case "quip": return 90
         case "bridge": return 70
+        case "emotion": return 12
         default: return 90
         }
     }

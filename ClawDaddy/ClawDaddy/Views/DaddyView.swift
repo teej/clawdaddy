@@ -38,6 +38,8 @@ struct DaddyView: View {
                 Divider()
                 Menu("Emotes") {
                     Button("Wink") { model.send(.emote(.wink)) }
+                    Button("Laugh") { model.send(.emote(.laugh)) }
+                    Button("Sunglasses") { model.send(.emote(.sunglasses)) }
                     Button("Backflip") { model.send(.emote(.backflip)) }
                     Button("Spin") { model.send(.emote(.spin)) }
                     Button("Crab Rave") { model.send(.emote(.crabRave)) }

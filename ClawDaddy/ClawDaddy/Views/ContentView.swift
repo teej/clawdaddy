@@ -26,7 +26,7 @@ struct ContentView: View {
     @State private var lastTranscriptLength = 0
     @State private var thinkingHoldUntil: Date?
     @State private var bottomRowHeight: CGFloat = 0
-    @State private var windowSize = CGSize(width: 320, height: 220)
+    @State private var windowSize = CGSize(width: 400, height: 220)
     @State private var localKeyMonitor: Any?
     @State private var globalKeyMonitor: Any?
     @State private var proximityMonitor: Any?
@@ -410,7 +410,8 @@ struct ContentView: View {
             daddyModel.send(.reaction(.perk))
         case (.thinking, .speaking):
             lastHeroMomentAt = now
-            daddyModel.send(.emote(.nod))
+            let emotion = socket.consumeEmotionCache() ?? .nod
+            daddyModel.send(.emote(emotion))
         default:
             break
         }
@@ -443,7 +444,7 @@ struct ContentView: View {
             commandTokens = Array(tokens.dropFirst())
         } else if tokens.count >= 2, tokens[0] == "do", tokens[1] == "a" {
             commandTokens = Array(tokens.dropFirst(2))
-        } else if tokens.first == "wink" || tokens.first == "tilt" || tokens.first == "surprised" || tokens.first == "surprise" || tokens.first == "salute" || tokens.first == "backflip" || tokens.first == "flip" || tokens.first == "plank" || tokens.first == "walk" || tokens.first == "play" || tokens.first == "dead" || tokens.first == "spin" || tokens.first == "crab" || tokens.first == "rave" || tokens.first == "dance" || tokens.first == "nod" || tokens.first == "shake" || tokens.first == "bow" {
+        } else if tokens.first == "wink" || tokens.first == "tilt" || tokens.first == "surprised" || tokens.first == "surprise" || tokens.first == "salute" || tokens.first == "backflip" || tokens.first == "flip" || tokens.first == "plank" || tokens.first == "walk" || tokens.first == "play" || tokens.first == "dead" || tokens.first == "spin" || tokens.first == "crab" || tokens.first == "rave" || tokens.first == "dance" || tokens.first == "nod" || tokens.first == "shake" || tokens.first == "bow" || tokens.first == "laugh" || tokens.first == "sunglasses" || tokens.first == "cool" {
             commandTokens = tokens
         } else {
             return false
@@ -500,6 +501,14 @@ struct ContentView: View {
         }
         if command.contains("bow") {
             daddyModel.send(.emote(.bow))
+            return true
+        }
+        if command.contains("laugh") {
+            daddyModel.send(.emote(.laugh))
+            return true
+        }
+        if command.contains("sunglasses") || command.contains("cool") {
+            daddyModel.send(.emote(.sunglasses))
             return true
         }
 
@@ -607,17 +616,27 @@ struct ContentView: View {
         )
     }
 
+    private let maxBubbles = 6
+
     private func appendBubble(text: String, isInteractive: Bool, agentId: String?) {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
             let item = BubbleItem(id: UUID().uuidString, text: text, isInteractive: isInteractive, agentId: agentId)
             bubbles.append(item)
+            trimBubbles()
+        }
+    }
+
+    private func trimBubbles() {
+        while bubbles.count > maxBubbles {
+            bubbles.removeFirst()
         }
     }
 
     private func upsertClawDaddyBubble(text: String) {
+        let isSpeaking = socket.appState.clawdaddy.state == "speaking"
         if let currentId = currentClawDaddyBubbleId,
            let index = bubbles.firstIndex(where: { $0.id == currentId }) {
-            if text.hasPrefix(lastClawDaddyMessage) || lastClawDaddyMessage.hasPrefix(text) {
+            if isSpeaking || text.hasPrefix(lastClawDaddyMessage) || lastClawDaddyMessage.hasPrefix(text) {
                 bubbles[index] = BubbleItem(id: currentId, text: text, isInteractive: false, agentId: nil)
                 lastClawDaddyMessage = text
                 return
@@ -629,7 +648,7 @@ struct ContentView: View {
             currentClawDaddyBubbleId = item.id
             lastClawDaddyMessage = text
             bubbles.append(item)
-            // OpenClaw messages never auto-dismiss
+            trimBubbles()
         }
     }
 
@@ -806,7 +825,7 @@ struct ContentView: View {
                 permissionAction: action
             )
             bubbles.append(item)
-            // Permission bubbles persist until acted on — no auto-dismiss
+            trimBubbles()
         }
     }
 

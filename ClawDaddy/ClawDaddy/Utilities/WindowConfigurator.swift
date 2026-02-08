@@ -81,10 +81,10 @@ struct WindowConfigurator: NSViewRepresentable {
     }
 
     private func preferredWindowSize(for screen: NSScreen?) -> NSSize {
-        guard let screen else { return NSSize(width: 320, height: 220) }
+        guard let screen else { return NSSize(width: 400, height: 220) }
         let frame = screen.visibleFrame
-        let height = max(220, frame.height * 0.5)
-        return NSSize(width: 320, height: height)
+        let height = max(220, frame.height - 64)
+        return NSSize(width: 400, height: height)
     }
 }
 
