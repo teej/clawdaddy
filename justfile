@@ -26,6 +26,26 @@ staple:
     xcrun stapler staple /tmp/crawdaddy-release/export/ClawDaddy.app
     xcrun stapler staple /tmp/crawdaddy-release/ClawDaddy.dmg
 
+# Build release zip ready for GitHub Releases
+release:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    BUILD_DIR="/tmp/crawdaddy-release-build"
+    rm -rf "$BUILD_DIR"
+    echo "==> Building Release (universal)..."
+    xcodebuild -project ClawDaddy/ClawDaddy.xcodeproj -scheme ClawDaddy -configuration Release -derivedDataPath "$BUILD_DIR" ONLY_ACTIVE_ARCH=NO build
+    APP="$BUILD_DIR/Build/Products/Release/ClawDaddy.app"
+    VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Contents/Info.plist")
+    ZIP="$BUILD_DIR/ClawDaddy-${VERSION}-mac.zip"
+    echo "==> Zipping ClawDaddy.app v${VERSION}..."
+    cd "$BUILD_DIR/Build/Products/Release" && zip -r -y "$ZIP" ClawDaddy.app
+    SIZE=$(du -h "$ZIP" | cut -f1 | xargs)
+    echo ""
+    echo "==> Ready: $ZIP ($SIZE)"
+    echo ""
+    echo "Upload to GitHub Releases with:"
+    echo "  gh release create v${VERSION} '$ZIP' --title 'ClawDaddy v${VERSION}' --notes-file -"
+
 # Run macOS unit tests
 test-macos:
     xcodebuild test -project ClawDaddy/ClawDaddy.xcodeproj -scheme ClawDaddy -destination 'platform=macOS' -derivedDataPath /tmp/crawdaddy-derived -only-testing:ClawDaddyTests
